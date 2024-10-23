@@ -1,0 +1,14 @@
+# Install docker if necessary
+sudo apt update
+sudo apt-get install docker.io -y
+
+# Build "zika" docker image
+sudo docker build -t zika .
+
+#To push to private repo
+sudo docker login
+sudo docker tag msa:latest alexanderbrown1313/zika:latest
+sudo docker push alexanderbrown1313/zika:latest
+
+# To check under the hood
+sudo docker run -it zika bash
