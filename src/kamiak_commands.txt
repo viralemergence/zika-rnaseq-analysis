@@ -3,7 +3,15 @@ module load singularity
 mkdir ./src/singularity_image
 singularity pull ./src/singularity_image/zika.sif docker://alexanderbrown1313/zika:latest
 
+# Command prep
+MAKEFILE="/src/container_commands/Makefile"
 FASTQ_DIR="/scratch/user/alexander.brown/20241022_231236/fastq"
+
+# To update certificates
+singularity exec --pwd /src \
+    --env-file `pwd`/.env \
+    ./src/singularity_image/zika.sif \
+    make -f $MAKEFILE test
 
 # To download fastq.gz data
 singularity exec --pwd /src \
