@@ -7,7 +7,7 @@ RUN apt-get update \
 
 # Install BaseSpace CLI
 RUN wget https://launch.basespace.illumina.com/CLI/1.6.1/amd64-linux/bs -P /src/tools/bs \
-    && chmod u+x /src/tools/bs/bs
+    && chmod a+x /src/tools/bs/bs
 
 # Configure BS CLI
 ENV PATH="/src/tools/bs:$PATH"
