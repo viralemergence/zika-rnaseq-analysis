@@ -1,0 +1,13 @@
+# To run on Kamiak with Singularity
+module load singularity
+mkdir ./src/singularity_image
+singularity pull ./src/singularity_image/zika.sif docker://alexanderbrown1313/zika:latest
+
+FASTQ_DIR="/scratch/user/alexander.brown/20241022_231236/fastq"
+
+# To download fastq.gz data
+singularity exec --pwd /src \
+    --bind $FASTQ_DIR:/src/data \
+    --env-file `pwd`/.env \
+    ./src/singularity_image/zika.sif \
+    bs download project -i 432190937 -o /src/data --extension=fastq.gz

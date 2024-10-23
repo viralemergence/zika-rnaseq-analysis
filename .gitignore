@@ -1,6 +1,9 @@
 # Working directory for data
 data/
 
+# Singularity folder for HPC work
+singularity_image/
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
