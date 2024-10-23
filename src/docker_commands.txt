@@ -12,3 +12,9 @@ sudo docker push alexanderbrown1313/zika:latest
 
 # To check under the hood
 sudo docker run -it zika bash
+
+# To download fastq.gz data
+sudo docker run --rm -v `pwd`/src/data:/src/data \
+    --env-file ./.env \
+    zika \
+    bs download project -i 432190937 -o /src/data --extension=fastq.gz
