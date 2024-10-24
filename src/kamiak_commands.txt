@@ -7,19 +7,11 @@ singularity pull ./src/singularity_image/zika.sif docker://alexanderbrown1313/zi
 MAKEFILE="/src/container_commands/Makefile"
 FASTQ_DIR="/scratch/user/alexander.brown/20241022_231236/fastq"
 
-# Currently, while Docker works with the BS CLI, Singularity/Kamiak does not
-# The best thing for now is to load the BS CLI module directly:
-module load basespace_cli
-BASESPACE_API_SERVER=https://api.basespace.illumina.com
-BASESPACE_ACCESS_TOKEN=
-
-bs download project -i 432190937 -o $FASTQ_DIR --extension=fastq.gz \
-    --api-server=$BASESPACE_API_SERVER \
-    --access-token=$BASESPACE_ACCESS_TOKEN
-
-# To download fastq.gz data via Singularity NOTE: NOT CURRENTLY WORKING!
+# To download fastq.gz data via Singularity
 singularity exec --pwd /src \
+    --no-home \
     --bind $FASTQ_DIR:/src/data \
+    --bind /etc:/etc \
     --env-file `pwd`/.env \
     ./src/singularity_image/zika.sif \
-    bs download project -i 432190937 -o $FASTQ_DIR --extension=fastq.gz
+    bs download project -i 432190937 -o /src/data --extension=fastq.gz
