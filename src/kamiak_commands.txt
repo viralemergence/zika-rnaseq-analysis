@@ -6,6 +6,7 @@ singularity pull ./src/singularity_image/zika.sif docker://alexanderbrown1313/zi
 # Command prep
 MAKEFILE="/src/container_commands/Makefile"
 FASTQ_DIR="/scratch/user/alexander.brown/20241022_231236/fastq"
+PROCESSED_FASTQ_DIR="/scratch/user/alexander.brown/20241022_231236/processed_fastq"
 
 # To download fastq.gz data via Singularity
 singularity exec --pwd /src \
@@ -15,3 +16,13 @@ singularity exec --pwd /src \
     --env-file `pwd`/.env \
     ./src/singularity_image/zika.sif \
     bs download project -i 432190937 -o /src/data --extension=fastq.gz
+
+# To process fastq.gz data with fastp
+singularity exec --pwd /src \
+    --no-home \
+    --bind `pwd`/src/app:/src/app \
+    --bind $FASTQ_DIR:/src/data/fastq \
+    --bind $PROCESSED_FASTQ_DIR:/src/data/processed_fastq \
+    ./src/singularity_image/zika.sif \
+    python3 -u /src/app/fastp_orchestration.py \
+    -i /src/data/fastq -o /src/data/processed_fastq -j 1
