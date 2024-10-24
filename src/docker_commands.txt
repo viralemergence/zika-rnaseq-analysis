@@ -18,3 +18,12 @@ sudo docker run --rm -v `pwd`/src/data:/src/data \
     --env-file ./.env \
     zika \
     bs download project -i 432190937 -o /src/data --extension=fastq.gz
+
+# To process paired end fastq.gz data
+sudo docker run --rm -v `pwd`/src/data:/src/data \
+    zika \
+    fastp \
+    -i /src/data/sampled_R1.fastq.gz -I /src/data/sampled_R2.fastq.gz \
+    -o /src/data/sampled_R1_processed.fastq.gz -O /src/data/sampled_R2_processed.fastq.gz \
+    -h /src/data/fastp.html \
+    -j /src/data/fastp.json
