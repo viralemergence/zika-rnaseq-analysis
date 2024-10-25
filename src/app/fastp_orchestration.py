@@ -48,7 +48,6 @@ class FastpManager:
                          "-i", input_r1, "-I", input_r2,
                          "-o", output_r1, "-O", output_r2]
 
-        print("Starting")
         p = subprocess.Popen(fastp_command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
         while p.poll() is None and (line := p.stderr.readline()) != "":
             print(line.strip())
