@@ -21,3 +21,6 @@ RUN wget http://opengene.org/fastp/fastp.0.23.4 -P /src/tools/fastp \
 
 # Configure fastp
 ENV PATH="/src/tools/fastp:$PATH"
+
+# Install fastqc (will include dependencies like java)
+RUN apt install fastqc=0.11.9+dfsg-5 -y
