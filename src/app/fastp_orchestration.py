@@ -1,5 +1,6 @@
 from argparse import ArgumentParser
 from pathlib import Path
+import subprocess
 
 class FastqInputManager:
     def __init__(self, input_dir: Path, output_dir: Path, subdir_index: int) -> None:
@@ -32,6 +33,31 @@ class FastqInputManager:
             output_fastqs[key] = outpath
         return output_fastqs
 
+class FastpManager:
+    def __init__(self, input_fastqs: dict[Path], output_fastqs: dict[Path]) -> None:
+        self.input_fastqs = input_fastqs
+        self.output_fastqs = output_fastqs
+
+    def run_fastp(self) -> None:
+        input_r1 = self.input_fastqs["R1"]
+        input_r2 = self.input_fastqs["R2"]
+        output_r1 = self.output_fastqs["R1"]
+        output_r2 = self.output_fastqs["R2"]
+
+        fastp_command = ["fastp", "-V",
+                         "-i", input_r1, "-I", input_r2,
+                         "-o", output_r1, "-O", output_r2]
+
+        print("Starting")
+        p = subprocess.Popen(fastp_command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        while p.poll() is None and (line := p.stderr.readline()) != "":
+            print(line.strip())
+        p.wait()
+        print(f"Exit code: {p.poll()}")
+
+        if p.poll() != 0:
+            raise Exception("Fastp did not complete successfully")
+
 if __name__ == "__main__":
     parser = ArgumentParser()
     parser.add_argument("-i", "--input_dir", type=str, required=True)
@@ -40,6 +66,5 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     fim = FastqInputManager(Path(args.input_dir), Path(args.output_dir), args.subdir_index)
-    print()
-    print(fim.input_fastqs)
-    print(fim.output_fastqs)
+    fpm = FastpManager(fim.input_fastqs, fim.output_fastqs)
+    fpm.run_fastp()
