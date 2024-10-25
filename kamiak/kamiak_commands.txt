@@ -4,9 +4,13 @@ mkdir ./src/singularity_image
 singularity pull ./src/singularity_image/zika.sif docker://alexanderbrown1313/zika:latest
 
 # Command prep
+SINGULARITY_IMAGE="/home/alexander.brown/zika-rnaseq-analysis/src/singularity_image/zika.sif"
 MAKEFILE="/src/container_commands/Makefile"
+HOST_APP_DIR="/home/alexander.brown/zika-rnaseq-analysis/src/app"
+
 FASTQ_DIR="/scratch/user/alexander.brown/20241022_231236/fastq"
 PROCESSED_FASTQ_DIR="/scratch/user/alexander.brown/20241022_231236/processed_fastq"
+FASTQC_DIR="/scratch/user/alexander.brown/20241022_231236/fastqc"
 
 # To download fastq.gz data via Singularity
 singularity exec --pwd /src \
@@ -26,3 +30,13 @@ singularity exec --pwd /src \
     ./src/singularity_image/zika.sif \
     python3 -u /src/app/fastp_orchestration.py \
     -i /src/data/fastq -o /src/data/processed_fastq -j 1
+
+# To QC fastq.gz data with fastqc
+singularity exec --pwd /src \
+    --no-home \
+    --bind $HOST_APP_DIR:/src/app \
+    --bind $PROCESSED_FASTQ_DIR:/src/data/processed_fastq \
+    --bind $FASTQC_DIR:/src/data/fastqc \
+    $SINGULARITY_IMAGE \
+    python3 -u /src/app/fastqc_orchestration.py \
+    -i /src/data/processed_fastq -o /src/data/fastqc -j 1
