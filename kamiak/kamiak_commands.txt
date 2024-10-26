@@ -8,6 +8,9 @@ SINGULARITY_IMAGE="/home/alexander.brown/zika-rnaseq-analysis/src/singularity_im
 MAKEFILE="/src/container_commands/Makefile"
 HOST_APP_DIR="/home/alexander.brown/zika-rnaseq-analysis/src/app"
 
+R1_ADAPTER_SEQ="AGATCGGAAGAGCACACGTCTGAACTCCAGTCAC"
+R2_ADAPTER_SEQ="AGATCGGAAGAGCGTCGTGTAGGGAAAGA"
+
 FASTQ_DIR="/scratch/user/alexander.brown/20241022_231236/fastq"
 PROCESSED_FASTQ_DIR="/scratch/user/alexander.brown/20241022_231236/processed_fastq"
 FASTQC_DIR="/scratch/user/alexander.brown/20241022_231236/fastqc"
@@ -24,12 +27,13 @@ singularity exec --pwd /src \
 # To process fastq.gz data with fastp
 singularity exec --pwd /src \
     --no-home \
-    --bind `pwd`/src/app:/src/app \
+    --bind $HOST_APP_DIR:/src/app \
     --bind $FASTQ_DIR:/src/data/fastq \
     --bind $PROCESSED_FASTQ_DIR:/src/data/processed_fastq \
     ./src/singularity_image/zika.sif \
     python3 -u /src/app/fastp_orchestration.py \
-    -i /src/data/fastq -o /src/data/processed_fastq -j 1
+    -i /src/data/fastq -o /src/data/processed_fastq -j 1 \
+    -r1a $R1_ADAPTER_SEQ -r2a $R2_ADAPTER_SEQ
 
 # To QC fastq.gz data with fastqc
 singularity exec --pwd /src \

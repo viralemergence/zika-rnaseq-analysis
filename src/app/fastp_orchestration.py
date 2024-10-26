@@ -38,7 +38,7 @@ class FastpManager:
         self.input_fastqs = input_fastqs
         self.output_fastqs = output_fastqs
 
-    def run_fastp(self) -> None:
+    def run_fastp(self, r1_adapter: str, r2_adapter: str) -> None:
         input_r1 = self.input_fastqs["R1"]
         input_r2 = self.input_fastqs["R2"]
         output_r1 = self.output_fastqs["R1"]
@@ -46,7 +46,9 @@ class FastpManager:
 
         fastp_command = ["fastp", "-V",
                          "-i", input_r1, "-I", input_r2,
-                         "-o", output_r1, "-O", output_r2]
+                         "-o", output_r1, "-O", output_r2,
+                         "--adapter_sequence", r1_adapter,
+                         "--adapter_sequence_r2", r2_adapter]
 
         p = subprocess.Popen(fastp_command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
         while p.poll() is None and (line := p.stderr.readline()) != "":
@@ -62,8 +64,10 @@ if __name__ == "__main__":
     parser.add_argument("-i", "--input_dir", type=str, required=True)
     parser.add_argument("-o", "--output_dir", type=str, required=True)
     parser.add_argument("-j", "--subdir_index", type=int, required=True)
+    parser.add_argument("-r1a", "--r1_adapter", type=str, required=True)
+    parser.add_argument("-r2a", "--r2_adapter", type=str, required=True)
     args = parser.parse_args()
 
     fim = FastqInputManager(Path(args.input_dir), Path(args.output_dir), args.subdir_index)
     fpm = FastpManager(fim.input_fastqs, fim.output_fastqs)
-    fpm.run_fastp()
+    fpm.run_fastp(args.r1_adapter, args.r2_adapter)

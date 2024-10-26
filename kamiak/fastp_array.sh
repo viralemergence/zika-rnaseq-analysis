@@ -14,10 +14,13 @@
 
 ZIKA_IMAGE="/home/alexander.brown/zika-rnaseq-analysis/src/singularity_image/zika.sif"
 
-HOST_APP_DIR=/home/alexander.brown/zika-rnaseq-analysis/src/app
+HOST_APP_DIR="/home/alexander.brown/zika-rnaseq-analysis/src/app"
 
 FASTQ_DIR="/scratch/user/alexander.brown/20241022_231236/fastq"
 PROCESSED_FASTQ_DIR="/scratch/user/alexander.brown/20241022_231236/processed_fastq"
+
+R1_ADAPTER_SEQ="AGATCGGAAGAGCACACGTCTGAACTCCAGTCAC"
+R2_ADAPTER_SEQ="AGATCGGAAGAGCGTCGTGTAGGGAAAGA"
 
 module load singularity
 singularity exec --pwd /src \
@@ -28,4 +31,5 @@ singularity exec --pwd /src \
     $ZIKA_IMAGE \
     python3 -u /src/app/fastp_orchestration.py \
     -i /src/data/fastq -o /src/data/processed_fastq \
-    -j $SLURM_ARRAY_TASK_ID
+    -j $SLURM_ARRAY_TASK_ID \
+    -r1a $R1_ADAPTER_SEQ -r2a $R2_ADAPTER_SEQ
