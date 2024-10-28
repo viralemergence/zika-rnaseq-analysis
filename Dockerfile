@@ -24,3 +24,11 @@ ENV PATH="/src/tools/fastp:$PATH"
 
 # Install fastqc (will include dependencies like java)
 RUN apt install fastqc=0.11.9+dfsg-5 -y
+
+# Install STAR aligner
+RUN wget https://github.com/alexdobin/STAR/archive/2.7.11b.tar.gz -P /src/tools/ \
+    && tar xzvf /src/tools/2.7.11b.tar.gz -C ./tools \
+    && rm /src/tools/2.7.11b.tar.gz
+
+# Configure STAR alginer
+ENV PATH="/src/tools/STAR-2.7.11b/bin/Linux_x86_64_static:$PATH"
