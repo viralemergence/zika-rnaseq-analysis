@@ -15,6 +15,8 @@ FASTQ_DIR="/scratch/user/alexander.brown/20241022_231236/fastq"
 PROCESSED_FASTQ_DIR="/scratch/user/alexander.brown/20241022_231236/processed_fastq"
 FASTQC_DIR="/scratch/user/alexander.brown/20241022_231236/fastqc"
 
+HOST_GENOME_DIR="/home/alexander.brown/zika-rnaseq-analysis/src/genomes"
+
 # To download fastq.gz data via Singularity
 singularity exec --pwd /src \
     --no-home \
@@ -44,3 +46,23 @@ singularity exec --pwd /src \
     $SINGULARITY_IMAGE \
     python3 -u /src/app/fastqc_orchestration.py \
     -i /src/data/processed_fastq -o /src/data/fastqc -j 1
+
+# Downloading Rousettus data
+wget https://ftp.ncbi.nlm.nih.gov/genomes/all/GCF/014/176/215/GCF_014176215.1_mRouAeg1.p/GCF_014176215.1_mRouAeg1.p_genomic.fna.gz \
+    -P ./src/genomes \
+    && gzip -d ./src/genomes/GCF_014176215.1_mRouAeg1.p_genomic.fna.gz
+wget https://ftp.ncbi.nlm.nih.gov/genomes/all/GCF/014/176/215/GCF_014176215.1_mRouAeg1.p/GCF_014176215.1_mRouAeg1.p_genomic.gtf.gz \
+    -P ./src/genomes \
+    && gzip -d ./src/genomes/GCF_014176215.1_mRouAeg1.p_genomic.gtf.gz
+
+# To generate STAR genome index; ~15 min
+singularity exec --pwd /src \
+    --no-home \
+    --bind $HOST_GENOME_DIR:/src/genomes \
+    $SINGULARITY_IMAGE \
+    STAR \
+    --runThreadN 10 --runMode genomeGenerate \
+    --genomeDir /src/genomes/rousettus_star_index/ \
+    --genomeFastaFiles /src/genomes/GCF_014176215.1_mRouAeg1.p_genomic.fna \
+    --sjdbGTFfile /src/genomes/GCF_014176215.1_mRouAeg1.p_genomic.gtf --sjdbOverhang 100 \
+    --outFileNamePrefix /src/genomes/rousettus_star_index/

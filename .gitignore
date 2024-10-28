@@ -1,5 +1,6 @@
 # Working directory for data
 data/
+genomes/
 
 # Singularity folder for HPC work
 singularity_image/
