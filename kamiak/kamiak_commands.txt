@@ -7,6 +7,8 @@ singularity pull ./src/singularity_image/zika.sif docker://alexanderbrown1313/zi
 SINGULARITY_IMAGE="/home/alexander.brown/zika-rnaseq-analysis/src/singularity_image/zika.sif"
 MAKEFILE="/src/container_commands/Makefile"
 HOST_APP_DIR="/home/alexander.brown/zika-rnaseq-analysis/src/app"
+HOST_DATA_DIR="/home/alexander.brown/zika-rnaseq-analysis/src/data"
+HOST_DATA_STAR_DIR="/home/alexander.brown/zika-rnaseq-analysis/src/data/star"
 
 R1_ADAPTER_SEQ="AGATCGGAAGAGCACACGTCTGAACTCCAGTCAC"
 R2_ADAPTER_SEQ="AGATCGGAAGAGCGTCGTGTAGGGAAAGA"
@@ -14,6 +16,7 @@ R2_ADAPTER_SEQ="AGATCGGAAGAGCGTCGTGTAGGGAAAGA"
 FASTQ_DIR="/scratch/user/alexander.brown/20241022_231236/fastq"
 PROCESSED_FASTQ_DIR="/scratch/user/alexander.brown/20241022_231236/processed_fastq"
 FASTQC_DIR="/scratch/user/alexander.brown/20241022_231236/fastqc"
+STAR_RESULTS_DIR="/scratch/user/alexander.brown/20241022_231236/star"
 
 HOST_GENOME_DIR="/home/alexander.brown/zika-rnaseq-analysis/src/genomes"
 
@@ -66,3 +69,15 @@ singularity exec --pwd /src \
     --genomeFastaFiles /src/genomes/GCF_014176215.1_mRouAeg1.p_genomic.fna \
     --sjdbGTFfile /src/genomes/GCF_014176215.1_mRouAeg1.p_genomic.gtf --sjdbOverhang 100 \
     --outFileNamePrefix /src/genomes/rousettus_star_index/
+
+# To generate gene counts with STAR
+singularity exec --pwd /src \
+    --no-home \
+    --bind $HOST_APP_DIR:/src/app \
+    --bind $HOST_GENOME_DIR:/src/genomes \
+    --bind $PROCESSED_FASTQ_DIR:/src/data/processed_fastq \
+    --bind $STAR_RESULTS_DIR:/src/data/star_results \
+    --bind $HOST_DATA_STAR_DIR:/src/data/star \
+    $SINGULARITY_IMAGE \
+    python3 -u /src/app/star_orchestration.py \
+    -i /src/data/processed_fastq -f /src/data/star/sample_file_names.txt -o /src/data/star_results -j 0
