@@ -6,7 +6,7 @@
 #SBATCH --mail-type=ALL
 #SBATCH --mail-user=alexander.brown@wsu.edu
 #SBATCH --time=7-00:00:00
-#SBATCH --array=0-16:1%10
+#SBATCH --array=0-94:1%14
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=4
@@ -16,8 +16,9 @@ ZIKA_IMAGE="/home/alexander.brown/zika-rnaseq-analysis/src/singularity_image/zik
 
 HOST_APP_DIR="/home/alexander.brown/zika-rnaseq-analysis/src/app"
 
-FASTQ_DIR="/scratch/user/alexander.brown/20241022_231236/fastq"
-PROCESSED_FASTQ_DIR="/scratch/user/alexander.brown/20241022_231236/processed_fastq"
+SCRATCH_DIR="/scratch/user/alexander.brown/20241028_213454"
+FASTQ_DIR=$SCRATCH_DIR"/fastq"
+PROCESSED_FASTQ_DIR=$SCRATCH_DIR"/processed_fastq"
 
 R1_ADAPTER_SEQ="AGATCGGAAGAGCACACGTCTGAACTCCAGTCAC"
 R2_ADAPTER_SEQ="AGATCGGAAGAGCGTCGTGTAGGGAAAGA"

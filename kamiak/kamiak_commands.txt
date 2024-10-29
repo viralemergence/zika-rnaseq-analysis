@@ -6,28 +6,30 @@ singularity pull ./src/singularity_image/zika.sif docker://alexanderbrown1313/zi
 # Command prep
 SINGULARITY_IMAGE="/home/alexander.brown/zika-rnaseq-analysis/src/singularity_image/zika.sif"
 MAKEFILE="/src/container_commands/Makefile"
+
 HOST_APP_DIR="/home/alexander.brown/zika-rnaseq-analysis/src/app"
 HOST_DATA_DIR="/home/alexander.brown/zika-rnaseq-analysis/src/data"
 HOST_DATA_STAR_DIR="/home/alexander.brown/zika-rnaseq-analysis/src/data/star"
+HOST_GENOME_DIR="/home/alexander.brown/zika-rnaseq-analysis/src/genomes"
 
 R1_ADAPTER_SEQ="AGATCGGAAGAGCACACGTCTGAACTCCAGTCAC"
 R2_ADAPTER_SEQ="AGATCGGAAGAGCGTCGTGTAGGGAAAGA"
 
-FASTQ_DIR="/scratch/user/alexander.brown/20241022_231236/fastq"
-PROCESSED_FASTQ_DIR="/scratch/user/alexander.brown/20241022_231236/processed_fastq"
-FASTQC_DIR="/scratch/user/alexander.brown/20241022_231236/fastqc"
-STAR_RESULTS_DIR="/scratch/user/alexander.brown/20241022_231236/star"
-
-HOST_GENOME_DIR="/home/alexander.brown/zika-rnaseq-analysis/src/genomes"
+SCRATCH_DIR="/scratch/user/alexander.brown/20241028_213454"
+FASTQ_DIR=$SCRATCH_DIR"/fastq"
+PROCESSED_FASTQ_DIR=$SCRATCH_DIR"/processed_fastq"
+FASTQC_DIR=$SCRATCH_DIR"/fastqc"
+STAR_RESULTS_DIR=$SCRATCH_DIR"/star"
 
 # To download fastq.gz data via Singularity
 singularity exec --pwd /src \
     --no-home \
-    --bind $FASTQ_DIR:/src/data \
+    --bind $FASTQ_DIR:/src/data/fastq \
     --bind /etc:/etc \
     --env-file `pwd`/.env \
-    ./src/singularity_image/zika.sif \
-    bs download project -i 432190937 -o /src/data --extension=fastq.gz
+    $SINGULARITY_IMAGE \
+    bs download project -i 432190937 -o /src/data/fastq --extension=fastq.gz
+# Also: 423121844
 
 # To process fastq.gz data with fastp
 singularity exec --pwd /src \
