@@ -6,7 +6,7 @@
 #SBATCH --mail-type=ALL
 #SBATCH --mail-user=alexander.brown@wsu.edu
 #SBATCH --time=7-00:00:00
-#SBATCH --array=0-33:1%12
+#SBATCH --array=0-189:1%12
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=4
@@ -16,8 +16,9 @@ SINGULARITY_IMAGE="/home/alexander.brown/zika-rnaseq-analysis/src/singularity_im
 
 HOST_APP_DIR=/home/alexander.brown/zika-rnaseq-analysis/src/app
 
-PROCESSED_FASTQ_DIR="/scratch/user/alexander.brown/20241022_231236/processed_fastq"
-FASTQC_DIR="/scratch/user/alexander.brown/20241022_231236/fastqc"
+SCRATCH_DIR="/scratch/user/alexander.brown/20241028_213454"
+PROCESSED_FASTQ_DIR=$SCRATCH_DIR"/processed_fastq"
+FASTQC_DIR=$SCRATCH_DIR"/fastqc"
 
 module load singularity
 singularity exec --pwd /src \
