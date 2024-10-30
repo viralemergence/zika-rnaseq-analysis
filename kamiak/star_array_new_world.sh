@@ -1,12 +1,12 @@
 #!/bin/bash
 #SBATCH --partition=remi
-#SBATCH --job-name=star_array_old_world
+#SBATCH --job-name=star_array_new_world
 #SBATCH --output=%x_%A_%a.out
 #SBATCH --error=%x_%A_%a.err
 #SBATCH --mail-type=ALL
 #SBATCH --mail-user=alexander.brown@wsu.edu
 #SBATCH --time=7-00:00:00
-#SBATCH --array=0-48:1%10
+#SBATCH --array=0-35:1%10
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=10
@@ -33,5 +33,5 @@ singularity exec --pwd /src \
     --bind $HOST_DATA_STAR_DIR:/src/data/star \
     $SINGULARITY_IMAGE \
     python3 -u /src/app/star_orchestration.py \
-    -i /src/data/processed_fastq -f /src/data/star/sample_file_names_old_world.txt -o /src/data/star_results \
-    -j $SLURM_ARRAY_TASK_ID
+    -i /src/data/processed_fastq -f /src/data/star/sample_file_names_new_world.txt \
+    -g /src/genomes/artibeus_star_index -o /src/data/star_results -j $SLURM_ARRAY_TASK_ID

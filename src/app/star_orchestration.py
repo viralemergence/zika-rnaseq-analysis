@@ -28,8 +28,9 @@ class FastqInputManager:
         return files
 
 class StarManager:
-    def __init__(self, input_fastqs: dict[Path], output_dir: Path) -> None:
+    def __init__(self, input_fastqs: dict[Path], genome_index: Path, output_dir: Path) -> None:
         self.input_fastqs = input_fastqs
+        self.genome_index = genome_index
         self.sub_output_dir = self.set_sub_output_dir(output_dir, input_fastqs["R1"])
 
     @staticmethod
@@ -43,7 +44,7 @@ class StarManager:
         input_r2 = self.input_fastqs["R2"]
 
         star_command = ["STAR",
-                         "--genomeDir", "/src/genomes/rousettus_star_index/", "--runThreadN", "10",
+                         "--genomeDir", self.genome_index, "--runThreadN", "10",
                          "--readFilesCommand", "zcat",
                          "--readFilesIn", input_r1, input_r2,
                          "--outFileNamePrefix", f"{self.sub_output_dir}/",
@@ -62,18 +63,19 @@ class StarManager:
         
     def move_gene_counts(self) -> None:
         gene_count_path = self.sub_output_dir / "ReadsPerGene.out.tab"
-        new_file_path = "/src/data/star/" + self.sub_output_dir.name + "_ReadsPerGene.out.tab"
+        new_file_path = "/src/data/star/gene_counts/" + self.sub_output_dir.name + "_ReadsPerGene.out.tab"
         move(gene_count_path, new_file_path)
 
 if __name__ == "__main__":
     parser = ArgumentParser()
     parser.add_argument("-i", "--input_dir", type=str, required=True)
     parser.add_argument("-f", "--file_names", type=str, required=True)
+    parser.add_argument("-g", "--genome_index", type=str, required=True)
     parser.add_argument("-o", "--output_dir", type=str, required=True)
     parser.add_argument("-j", "--file_index", type=int, required=True)
     args = parser.parse_args()
 
     fim = FastqInputManager(Path(args.input_dir), Path(args.file_names), args.file_index)
-    sm = StarManager(fim.input_fastqs, Path(args.output_dir))
+    sm = StarManager(fim.input_fastqs, Path(args.genome_index), Path(args.output_dir))
     sm.run_star_gene_count()
     sm.move_gene_counts()
