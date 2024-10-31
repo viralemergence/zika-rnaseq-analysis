@@ -10,6 +10,7 @@ MAKEFILE="/src/container_commands/Makefile"
 HOST_APP_DIR="/home/alexander.brown/zika-rnaseq-analysis/src/app"
 HOST_DATA_DIR="/home/alexander.brown/zika-rnaseq-analysis/src/data"
 HOST_DATA_STAR_DIR="/home/alexander.brown/zika-rnaseq-analysis/src/data/star"
+HOST_DATA_DESEQ_DIR="/home/alexander.brown/zika-rnaseq-analysis/src/data/pydeseq2"
 HOST_GENOME_DIR="/home/alexander.brown/zika-rnaseq-analysis/src/genomes"
 
 R1_ADAPTER_SEQ="AGATCGGAAGAGCACACGTCTGAACTCCAGTCAC"
@@ -117,7 +118,7 @@ singularity exec --pwd /src \
     -i /src/data/processed_fastq -f /src/data/star/sample_file_names_new_world.txt \
     -g /src/genomes/artibeus_star_index -o /src/data/star_results -j 0
 
-To collate STAR gene counts
+# To collate STAR gene counts
 singularity exec --pwd /src \
     --no-home \
     --bind $HOST_APP_DIR:/src/app \
@@ -126,3 +127,13 @@ singularity exec --pwd /src \
     python3 -u /src/app/gene_count_collation.py \
     -i /src/data/star/gene_counts \
     -o /src/data/star/collated_gene_counts.csv
+
+# To run PyDeseq2
+singularity exec --pwd /src \
+    --no-home \
+    --bind $HOST_APP_DIR:/src/app \
+    --bind $HOST_DATA_DESEQ_DIR:/src/data/pydeseq2 \
+    --bind $HOST_DATA_STAR_DIR:/src/data/star \
+    $SINGULARITY_IMAGE \
+    python3 -u /src/app/differential_expression_analysis.py \
+    -c /src/data/star/collated_gene_counts.csv
