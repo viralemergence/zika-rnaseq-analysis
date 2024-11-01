@@ -41,3 +41,7 @@ RUN pip3 install pydeseq2==0.4.12
 
 # Install scanpy
 RUN pip3 install scanpy==1.10.3
+
+# Install pyComBat via InMoose
+RUN pip3 install --upgrade pip
+RUN pip3 install inmoose --break-system-packages
