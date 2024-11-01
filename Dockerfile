@@ -37,4 +37,7 @@ ENV PATH="/src/tools/STAR-2.7.11b/bin/Linux_x86_64_static:$PATH"
 RUN apt install python3-pip -y
 
 # Install pydeseq2
-RUN pip3 install pydeseq2
+RUN pip3 install pydeseq2==0.4.12
+
+# Install scanpy
+RUN pip3 install scanpy==1.10.3
