@@ -3,6 +3,10 @@ import pandas as pd # type: ignore
 from pathlib import Path
 from pydeseq2.dds import DeseqDataSet # type: ignore
 
+import os
+os.environ["NUMBA_CACHE_DIR"] = "/tmp/" # Needed for scanpy to import properly
+import scanpy as sc # type: ignore
+
 class SampleMetaDataManager:
     def __init__(self, metadata_path: Path) -> None:
         self.metadata_path = metadata_path
@@ -94,12 +98,21 @@ class DifferentialExpressionAnalysis:
     
     def run(self, gene_counts: pd.DataFrame, sample_metadata: pd.DataFrame) -> None:
         gene_counts, sample_metadata = self.remove_discrepant_sample_ids(gene_counts, sample_metadata)
-        design_factors = ["Treatment", "Cell Line", "Time", "Lib. Prep Batch"] # Need to add virus back without NA
+        cell_line = "HypNi"
+        gene_counts, sample_metadata = self.filter_for_cell_line(gene_counts, sample_metadata, cell_line)
+        #design_factors = ["Treatment", "Cell Line", "Time", "Lib. Prep Batch"] # Doesn't like virus
+        design_factors = ["Treatment", "Time", "Lib. Prep Batch"] # Doesn't like virus
         dds = DeseqDataSet(counts=gene_counts,
                            metadata=sample_metadata,
                            design_factors=design_factors)
         dds.deseq2()
-        print(dds)
+        sc.tl.pca(dds)
+        sc.settings.figdir = "/src/data/pydeseq2/"
+        sc.pl.pca(dds, color="Lib. Prep Batch", size=200, save=f"_{cell_line}_Lib_Prep_Batch.png")
+        sc.pl.pca(dds, color="Cell Line", size=200, save=f"_{cell_line}_Cell_Line.png")
+        sc.pl.pca(dds, color="Treatment", size=200, save=f"_{cell_line}_Treatment.png")
+        sc.pl.pca(dds, color="Time", size=200, save=f"_{cell_line}_Time.png")
+        sc.pl.pca(dds, color="Virus", size=200, save=f"_{cell_line}_Virus.png")
         
     @staticmethod
     def remove_discrepant_sample_ids(gene_counts: pd.DataFrame, sample_metadata: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
@@ -109,6 +122,12 @@ class DifferentialExpressionAnalysis:
 
         gene_counts = gene_counts[gene_counts.index.isin(shared_ids)]
         sample_metadata = sample_metadata[sample_metadata.index.isin(shared_ids)]
+        return gene_counts, sample_metadata
+    
+    @staticmethod
+    def filter_for_cell_line(gene_counts: pd.DataFrame, sample_metadata: pd.DataFrame, cell_line: str) -> tuple[pd.DataFrame, pd.DataFrame]:
+        sample_metadata = sample_metadata[sample_metadata["Cell Line"] == cell_line]
+        gene_counts = gene_counts[gene_counts.index.isin(sample_metadata.index)]
         return gene_counts, sample_metadata
 
 if __name__ == "__main__":
