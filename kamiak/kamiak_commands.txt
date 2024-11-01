@@ -136,4 +136,5 @@ singularity exec --pwd /src \
     --bind $HOST_DATA_STAR_DIR:/src/data/star \
     $SINGULARITY_IMAGE \
     python3 -u /src/app/differential_expression_analysis.py \
-    -c /src/data/star/collated_gene_counts.csv
+    -c /src/data/star/collated_gene_counts.csv \
+    -m /src/data/pydeseq2/sample_metadata.csv
