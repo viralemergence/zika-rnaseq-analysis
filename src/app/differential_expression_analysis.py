@@ -1,6 +1,7 @@
 from argparse import ArgumentParser
 import pandas as pd # type: ignore
 from pathlib import Path
+import pickle
 from pydeseq2.dds import DeseqDataSet # type: ignore
 
 import os
@@ -94,26 +95,25 @@ class GeneCountManager:
 
 class DifferentialExpressionAnalysis:
     def __init__(self):
-        pass
+        sc.settings.figdir = "/src/data/pydeseq2/"
     
     def run(self, gene_counts: pd.DataFrame, sample_metadata: pd.DataFrame) -> None:
-        gene_counts, sample_metadata = self.remove_discrepant_sample_ids(gene_counts, sample_metadata)
-        cell_line = "HypNi"
-        gene_counts, sample_metadata = self.filter_for_cell_line(gene_counts, sample_metadata, cell_line)
-        #design_factors = ["Treatment", "Cell Line", "Time", "Lib. Prep Batch"] # Doesn't like virus
-        design_factors = ["Treatment", "Time", "Lib. Prep Batch"] # Doesn't like virus
-        dds = DeseqDataSet(counts=gene_counts,
-                           metadata=sample_metadata,
-                           design_factors=design_factors)
-        dds.deseq2()
-        sc.tl.pca(dds)
-        sc.settings.figdir = "/src/data/pydeseq2/"
-        sc.pl.pca(dds, color="Lib. Prep Batch", size=200, save=f"_{cell_line}_Lib_Prep_Batch.png")
-        sc.pl.pca(dds, color="Cell Line", size=200, save=f"_{cell_line}_Cell_Line.png")
-        sc.pl.pca(dds, color="Treatment", size=200, save=f"_{cell_line}_Treatment.png")
-        sc.pl.pca(dds, color="Time", size=200, save=f"_{cell_line}_Time.png")
-        sc.pl.pca(dds, color="Virus", size=200, save=f"_{cell_line}_Virus.png")
-        
+        design_factors = ["Virus", "Time", "Lib. Prep Batch"] # Doesn't like Virus AND Treatment (redundancy probably)
+        original_gene_counts, original_sample_metadata = self.remove_discrepant_sample_ids(gene_counts, sample_metadata)
+        cell_lines = self.extract_cell_lines(original_sample_metadata)
+        print(cell_lines)
+
+        for cell_line in cell_lines:
+            print(f"Starting on cell line: {cell_line}")
+            gene_counts, sample_metadata = self.filter_for_cell_line(original_gene_counts, original_sample_metadata, cell_line)
+            gene_counts, sample_metadata = self.pickle_and_rectify_batch_effect(gene_counts, sample_metadata, cell_line)
+
+            dds = DeseqDataSet(counts=gene_counts,
+                               metadata=sample_metadata,
+                               design_factors=design_factors)
+            dds.deseq2()
+            self.perform_principal_component_analysis(dds, cell_line, design_factors)
+
     @staticmethod
     def remove_discrepant_sample_ids(gene_counts: pd.DataFrame, sample_metadata: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
         gene_count_sample_ids = set(gene_counts.index)
@@ -125,10 +125,60 @@ class DifferentialExpressionAnalysis:
         return gene_counts, sample_metadata
     
     @staticmethod
+    def extract_cell_lines(sample_metadata: pd.DataFrame) -> set[str]:
+        cell_lines = set(sample_metadata["Cell Line"].to_list())
+        cell_lines.discard("nan")
+        return cell_lines
+    
+    @staticmethod
     def filter_for_cell_line(gene_counts: pd.DataFrame, sample_metadata: pd.DataFrame, cell_line: str) -> tuple[pd.DataFrame, pd.DataFrame]:
         sample_metadata = sample_metadata[sample_metadata["Cell Line"] == cell_line]
         gene_counts = gene_counts[gene_counts.index.isin(sample_metadata.index)]
         return gene_counts, sample_metadata
+    
+    @classmethod
+    def pickle_and_rectify_batch_effect(cls, gene_counts: pd.DataFrame, sample_metadata: pd.DataFrame, cell_line: str) -> tuple[pd.DataFrame, pd.DataFrame]:
+        gene_counts_pickled_path = Path(f"/src/data/pydeseq2/pickles/{cell_line}_gene_counts.pkl")
+        sample_metadata_pickled_path = Path(f"/src/data/pydeseq2/pickles/{cell_line}_sample_metadata.pkl")
+        if gene_counts_pickled_path.is_file():
+            print(f"{cell_line} pickle detected. Loading now")
+            with gene_counts_pickled_path.open("rb") as inhandle:
+                gene_counts = pickle.load(inhandle)
+            with sample_metadata_pickled_path.open("rb") as inhandle:
+                sample_metadata = pickle.load(inhandle)
+        else:
+            gene_counts, sample_metadata = cls.rectify_batch_effect(gene_counts, sample_metadata)
+            with gene_counts_pickled_path.open("wb") as outhandle:
+                pickle.dump(gene_counts, outhandle)
+            with sample_metadata_pickled_path.open("wb") as outhandle:
+                pickle.dump(sample_metadata, outhandle)
+        return gene_counts, sample_metadata
+    
+    @classmethod
+    def rectify_batch_effect(cls, gene_counts: pd.DataFrame, sample_metadata: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
+        from inmoose.pycombat import pycombat_seq # Need to import inside function to prevent module overlap issues
+        print("Starting batch effect correction (this may take awhile)")
+        batches = sample_metadata["Lib. Prep Batch"].to_list()
+        covariates = sample_metadata[["Time", "Virus"]]
+        gene_counts = pycombat_seq(gene_counts.T, batches, covar_mod=covariates).T.astype("int")
+        return cls.correct_negative_numbers(gene_counts), sample_metadata
+    
+    @staticmethod
+    def correct_negative_numbers(gene_counts: pd.DataFrame) -> pd.DataFrame:
+        negative_count = (gene_counts < 0).sum().sum()
+        if negative_count > 0:
+            print(f"\nWARNING: {negative_count} negative values detected after batch effect correction")
+            gene_counts[gene_counts < 0] = 0
+            print("Negative values have been set to 0\n")
+            return gene_counts
+        return gene_counts
+    
+    @staticmethod
+    def perform_principal_component_analysis(dds: DeseqDataSet, cell_line: str, design_factors: list[str]) -> None:
+        sc.tl.pca(dds)
+        parameters = {"size": 200, "annotate_var_explained": True}
+        for design_factor in design_factors:
+            sc.pl.pca(dds, color=design_factor, save=f"_{cell_line}_{design_factor}.png", **parameters)
 
 if __name__ == "__main__":
     parser = ArgumentParser()
