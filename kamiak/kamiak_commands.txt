@@ -137,4 +137,5 @@ singularity exec --pwd /src \
     $SINGULARITY_IMAGE \
     python3 -u /src/app/differential_expression_analysis.py \
     -c /src/data/star/collated_gene_counts.csv \
-    -m /src/data/pydeseq2/sample_metadata.csv
+    -m /src/data/pydeseq2/sample_metadata.csv \
+    -k /src/data/pydeseq2/samples_to_combine.csv

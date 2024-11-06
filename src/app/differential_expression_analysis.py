@@ -1,10 +1,11 @@
 from argparse import ArgumentParser
+from csv import reader
+import os
 import pandas as pd # type: ignore
 from pathlib import Path
 import pickle
 from pydeseq2.dds import DeseqDataSet # type: ignore
 
-import os
 os.environ["NUMBA_CACHE_DIR"] = "/tmp/" # Needed for scanpy to import properly
 import scanpy as sc # type: ignore
 
@@ -60,8 +61,10 @@ class GeneCountManager:
     def __init__(self, gene_counts_path: Path) -> None:
         self.gene_counts_path = gene_counts_path
 
-    def run(self, count_id_conversion: dict[str]) -> None:
+    def run(self, count_id_conversion: dict[str], samples_to_combine_path: Path = False) -> None:
         gene_counts = self.extract_gene_counts(self.gene_counts_path)
+        if samples_to_combine_path:
+            gene_counts = self.combine_samples(gene_counts, samples_to_combine_path)
         gene_counts = self.rename_gene_count_ids(gene_counts, count_id_conversion)
         gene_counts = self.set_gene_id_as_index(gene_counts)
         gene_counts = self.remove_all_zero_rows(gene_counts)
@@ -71,6 +74,21 @@ class GeneCountManager:
     @staticmethod
     def extract_gene_counts(gene_counts_path: Path) -> pd.DataFrame:
         return pd.read_csv(gene_counts_path)
+    
+    @classmethod
+    def combine_samples(cls, gene_counts: pd.DataFrame, samples_to_combine_path: Path) -> pd.DataFrame:
+        samples_to_combine = cls.extract_samples_to_combine(samples_to_combine_path)
+        for sample_1, sample_2 in samples_to_combine:
+            gene_counts[sample_1] = gene_counts[sample_1] + gene_counts[sample_2]
+            gene_counts = gene_counts.drop([sample_2], axis=1)
+        return gene_counts
+
+    @staticmethod
+    def extract_samples_to_combine(samples_to_combine_path: Path) -> list[list]:
+        with samples_to_combine_path.open() as inhandle:
+            reader_iterator = reader(inhandle, delimiter=",")
+            samples_to_combine = [line for line in reader_iterator]
+        return samples_to_combine
 
     @staticmethod
     def rename_gene_count_ids(gene_counts: pd.DataFrame, id_conversion_dict: dict[str]) -> pd.DataFrame:
@@ -156,7 +174,7 @@ class DifferentialExpressionAnalysis:
     
     @classmethod
     def rectify_batch_effect(cls, gene_counts: pd.DataFrame, sample_metadata: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
-        from inmoose.pycombat import pycombat_seq # Need to import inside function to prevent module overlap issues
+        from inmoose.pycombat import pycombat_seq # type: ignore # Need to import inside function to prevent module overlap issues
         print("Starting batch effect correction (this may take awhile)")
         batches = sample_metadata["Lib. Prep Batch"].to_list()
         covariates = sample_metadata[["Time", "Virus"]]
@@ -184,13 +202,17 @@ if __name__ == "__main__":
     parser = ArgumentParser()
     parser.add_argument("-c", "--counts", type=str, required=True)
     parser.add_argument("-m", "--metadata", type=str, required=True)
+    parser.add_argument("-k", "--combine", type=str, required=False)
     args = parser.parse_args()
 
     smdm = SampleMetaDataManager(Path(args.metadata))
     smdm.run()
 
     gcm = GeneCountManager(Path(args.counts))
-    gcm.run(smdm.count_id_conversion)
+    gcm_parameters = {"count_id_conversion": smdm.count_id_conversion}
+    if args.combine:
+        gcm_parameters.update({"samples_to_combine_path": Path(args.combine)})
+    gcm.run(**gcm_parameters)
     
     dea = DifferentialExpressionAnalysis()
     dea.run(gcm.gene_counts, smdm.sample_metadata)
