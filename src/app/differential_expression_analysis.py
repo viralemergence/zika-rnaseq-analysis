@@ -1,4 +1,3 @@
-from anndata import AnnData # type: ignore
 from argparse import ArgumentParser
 from csv import reader
 import matplotlib.pyplot as plt # type: ignore
@@ -120,22 +119,24 @@ class DifferentialExpressionAnalysis:
         sc.settings.figdir = self.figure_dir
 
     def run(self, gene_counts: pd.DataFrame, sample_metadata: pd.DataFrame) -> None:
-        pca_color_factors = ["Lib. Prep Batch", "Time", "Virus"]
         design_factors = ["Time"] # Doesn't like Virus AND Treatment (redundancy probably)
-        original_gene_counts, original_sample_metadata = self.remove_discrepant_sample_ids(gene_counts, sample_metadata)
-        cell_lines = self.extract_cell_lines(original_sample_metadata)
+        viruses = ["MR", "PRV"]
+        pca_color_factors = ["Lib. Prep Batch", "Time", "Virus"]
+
+        gene_counts, sample_metadata = self.remove_discrepant_sample_ids(gene_counts, sample_metadata)
+        cell_lines = self.extract_cell_lines(sample_metadata)
         print(cell_lines)
 
         for cell_line in cell_lines:
             print(f"Starting on cell line: {cell_line}")
-            gene_counts, sample_metadata = self.filter_for_cell_line(original_gene_counts, original_sample_metadata, cell_line)
-            gene_counts, sample_metadata = self.pickle_and_rectify_batch_effect(gene_counts, sample_metadata, cell_line)
+            gene_counts_by_cell_line, sample_metadata_by_cell_line = self.filter_for_cell_line(gene_counts, sample_metadata, cell_line)
+            gene_counts_by_cell_line, sample_metadata_by_cell_line = self.pickle_and_rectify_batch_effect(gene_counts_by_cell_line, sample_metadata_by_cell_line, cell_line)
             
-            for virus in ["MR", "PRV"]:
-                virus_gene_counts, virus_sample_metadata = self.filter_for_virus(gene_counts, sample_metadata, virus)
+            for virus in viruses:
+                gene_counts_by_virus, sample_metadata_by_virus = self.filter_for_virus(gene_counts_by_cell_line, sample_metadata_by_cell_line, virus)
             
-                dds = DeseqDataSet(counts=virus_gene_counts,
-                                metadata=virus_sample_metadata,
+                dds = DeseqDataSet(counts=gene_counts_by_virus,
+                                metadata=sample_metadata_by_virus,
                                 design_factors=design_factors)
                 dds.deseq2()
 
