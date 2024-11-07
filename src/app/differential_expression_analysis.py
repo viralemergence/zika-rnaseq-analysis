@@ -1,5 +1,7 @@
+from anndata import AnnData # type: ignore
 from argparse import ArgumentParser
 from csv import reader
+import matplotlib.pyplot as plt # type: ignore
 import os
 import pandas as pd # type: ignore
 from pathlib import Path
@@ -8,6 +10,7 @@ from pydeseq2.dds import DeseqDataSet # type: ignore
 
 os.environ["NUMBA_CACHE_DIR"] = "/tmp/" # Needed for scanpy to import properly
 import scanpy as sc # type: ignore
+import scipy.cluster.hierarchy as sch # type: ignore
 
 class SampleMetaDataManager:
     def __init__(self, metadata_path: Path) -> None:
@@ -113,10 +116,12 @@ class GeneCountManager:
 
 class DifferentialExpressionAnalysis:
     def __init__(self):
-        sc.settings.figdir = "/src/data/pydeseq2/"
-    
+        self.figure_dir = "/src/data/pydeseq2/"
+        sc.settings.figdir = self.figure_dir
+
     def run(self, gene_counts: pd.DataFrame, sample_metadata: pd.DataFrame) -> None:
-        design_factors = ["Virus", "Time", "Lib. Prep Batch"] # Doesn't like Virus AND Treatment (redundancy probably)
+        pca_color_factors = ["Lib. Prep Batch", "Time", "Virus"]
+        design_factors = ["Time"] # Doesn't like Virus AND Treatment (redundancy probably)
         original_gene_counts, original_sample_metadata = self.remove_discrepant_sample_ids(gene_counts, sample_metadata)
         cell_lines = self.extract_cell_lines(original_sample_metadata)
         print(cell_lines)
@@ -125,12 +130,19 @@ class DifferentialExpressionAnalysis:
             print(f"Starting on cell line: {cell_line}")
             gene_counts, sample_metadata = self.filter_for_cell_line(original_gene_counts, original_sample_metadata, cell_line)
             gene_counts, sample_metadata = self.pickle_and_rectify_batch_effect(gene_counts, sample_metadata, cell_line)
+            
+            for virus in ["MR", "PRV"]:
+                virus_gene_counts, virus_sample_metadata = self.filter_for_virus(gene_counts, sample_metadata, virus)
+            
+                dds = DeseqDataSet(counts=virus_gene_counts,
+                                metadata=virus_sample_metadata,
+                                design_factors=design_factors)
+                dds.deseq2()
 
-            dds = DeseqDataSet(counts=gene_counts,
-                               metadata=sample_metadata,
-                               design_factors=design_factors)
-            dds.deseq2()
-            self.perform_principal_component_analysis(dds, cell_line, design_factors)
+                dds.obs["Lib. Prep Batch"] = dds.obs["Lib. Prep Batch"].astype(int).astype(str)
+                self.perform_principal_component_analysis(dds, cell_line, virus, pca_color_factors)
+                
+                self.perform_hierarchical_clustering(dds, cell_line, virus, self.figure_dir)
 
     @staticmethod
     def remove_discrepant_sample_ids(gene_counts: pd.DataFrame, sample_metadata: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
@@ -192,11 +204,34 @@ class DifferentialExpressionAnalysis:
         return gene_counts
     
     @staticmethod
-    def perform_principal_component_analysis(dds: DeseqDataSet, cell_line: str, design_factors: list[str]) -> None:
+    def filter_for_virus(gene_counts: pd.DataFrame, sample_metadata: pd.DataFrame, virus: str) -> tuple[pd.DataFrame, pd.DataFrame]:
+        virus_list = [virus, "No_Virus"]
+        sample_metadata = sample_metadata[sample_metadata["Virus"].isin(virus_list)]
+        gene_counts = gene_counts[gene_counts.index.isin(sample_metadata.index)]
+        return gene_counts, sample_metadata
+
+    @staticmethod
+    def perform_principal_component_analysis(dds: DeseqDataSet, cell_line: str, virus: str, design_factors: list[str]) -> None:
         sc.tl.pca(dds)
         parameters = {"size": 200, "annotate_var_explained": True}
         for design_factor in design_factors:
-            sc.pl.pca(dds, color=design_factor, save=f"_{cell_line}_{design_factor}.png", **parameters)
+            sc.pl.pca(dds, color=design_factor, save=f"_{cell_line}_{virus}_{design_factor}.png", **parameters)
+
+    @staticmethod
+    def perform_hierarchical_clustering(dds: DeseqDataSet, cell_line: str, virus: str, figure_dir: str) -> None:
+        Z = sch.linkage(dds.obsm["X_pca"], method="complete", metric="correlation")
+        fig, ax = plt.subplots()
+        sch.dendrogram(Z, ax=ax, orientation="left", labels=dds.obs["DesiredFileName"].tolist())
+        labels = ax.get_ymajorticklabels()
+        for label in labels:
+            virus_treatment = str(label).split("_")[1]
+            timepoint = str(label).split("_")[2]
+            if virus_treatment == "NA" or timepoint == "T0":
+                color = "r"
+            else:
+                color = "b"
+            label.set_color(color)
+        plt.savefig(f"{figure_dir}dendrogram_{cell_line}_{virus}.png", bbox_inches="tight")
 
 if __name__ == "__main__":
     parser = ArgumentParser()
