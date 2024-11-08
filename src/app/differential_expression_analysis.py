@@ -65,6 +65,7 @@ class GeneCountManager:
 
     def run(self, count_id_conversion: dict[str], samples_to_combine_path: Path = False) -> None:
         gene_counts = self.extract_gene_counts(self.gene_counts_path)
+        gene_counts = self.remove_blacklist_samples(gene_counts)
         if samples_to_combine_path:
             gene_counts = self.combine_samples(gene_counts, samples_to_combine_path)
         gene_counts = self.rename_gene_count_ids(gene_counts, count_id_conversion)
@@ -77,6 +78,11 @@ class GeneCountManager:
     def extract_gene_counts(gene_counts_path: Path) -> pd.DataFrame:
         return pd.read_csv(gene_counts_path)
     
+    @staticmethod
+    def remove_blacklist_samples(gene_counts: pd.DataFrame) -> pd.DataFrame:
+        blacklist_samples = ["HypNi_ZIKV_PRVABC59_24_a_S35"]
+        return gene_counts.drop(blacklist_samples, axis=1)
+
     @classmethod
     def combine_samples(cls, gene_counts: pd.DataFrame, samples_to_combine_path: Path) -> pd.DataFrame:
         samples_to_combine = cls.extract_samples_to_combine(samples_to_combine_path)
