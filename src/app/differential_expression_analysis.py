@@ -125,7 +125,7 @@ class DifferentialExpressionAnalysis:
         sc.settings.figdir = self.figure_dir
 
     def run(self, gene_counts: pd.DataFrame, sample_metadata: pd.DataFrame) -> None:
-        design_factors = ["Time"] # Doesn't like Virus AND Treatment (redundancy probably)
+        design_factors = ["Time", "Virus"] # Doesn't like Virus AND Treatment (redundancy probably)
         viruses = ["MR", "PRV"]
         pca_color_factors = ["Lib. Prep Batch", "Time", "Virus"]
 
@@ -134,12 +134,16 @@ class DifferentialExpressionAnalysis:
         print(cell_lines)
 
         for cell_line in cell_lines:
+            # if cell_line != "R06E":
+            #     continue
             print(f"Starting on cell line: {cell_line}")
             gene_counts_by_cell_line, sample_metadata_by_cell_line = self.filter_for_cell_line(gene_counts, sample_metadata, cell_line)
             gene_counts_by_cell_line, sample_metadata_by_cell_line = self.pickle_and_rectify_batch_effect(gene_counts_by_cell_line, sample_metadata_by_cell_line, cell_line)
             
             for virus in viruses:
                 gene_counts_by_virus, sample_metadata_by_virus = self.filter_for_virus(gene_counts_by_cell_line, sample_metadata_by_cell_line, virus)
+                self.write_input_data_for_log_ratio_test(gene_counts_by_virus, sample_metadata_by_virus, self.figure_dir)
+                # return
             
                 dds = DeseqDataSet(counts=gene_counts_by_virus,
                                 metadata=sample_metadata_by_virus,
@@ -239,6 +243,13 @@ class DifferentialExpressionAnalysis:
                 color = "b"
             label.set_color(color)
         plt.savefig(f"{figure_dir}dendrogram_{cell_line}_{virus}.png", bbox_inches="tight")
+        
+    @staticmethod
+    def write_input_data_for_log_ratio_test(gene_counts: pd.DataFrame, sample_metadata: pd.DataFrame, directory: Path) -> None:
+        gene_count_outpath = f"{directory}gene_counts_R_input.csv"
+        sample_metadata_outpath = f"{directory}sample_metadata_R_input.csv"
+        gene_counts.to_csv(gene_count_outpath, index=True)
+        sample_metadata.to_csv(sample_metadata_outpath, index=True)
 
 if __name__ == "__main__":
     parser = ArgumentParser()
