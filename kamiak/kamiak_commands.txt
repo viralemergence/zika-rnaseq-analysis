@@ -139,3 +139,15 @@ singularity exec --pwd /src \
     -c /src/data/star/collated_gene_counts.csv \
     -m /src/data/pydeseq2/sample_metadata.csv \
     -k /src/data/pydeseq2/samples_to_combine.csv
+
+# To test R Deseq2 LRT function
+singularity exec --pwd /src \
+    --no-home \
+    --env LC_ALL=C.UTF-8 \
+    --bind $HOST_APP_DIR:/src/app \
+    --bind $HOST_DATA_DESEQ_DIR:/src/data/pydeseq2 \
+    $SINGULARITY_IMAGE \
+    Rscript /src/app/log_ratio_test.R \
+    "/src/data/pydeseq2/gene_counts_R_input.csv" \
+    "/src/data/pydeseq2/sample_metadata_R_input.csv" \
+    "/src/data/pydeseq2/LRT_results.csv"
