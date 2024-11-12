@@ -45,3 +45,24 @@ RUN pip3 install scanpy==1.10.3
 # Install pyComBat via InMoose
 RUN pip3 install --upgrade pip
 RUN pip3 install inmoose --break-system-packages
+
+# Install R
+RUN wget -qO- https://cloud.r-project.org/bin/linux/ubuntu/marutter_pubkey.asc | gpg --dearmor -o /usr/share/keyrings/r-project.gpg
+RUN echo "deb [signed-by=/usr/share/keyrings/r-project.gpg] https://cloud.r-project.org/bin/linux/ubuntu jammy-cran40/" | tee -a /etc/apt/sources.list.d/r-project.list
+RUN apt update
+RUN DEBIAN_FRONTEND="noninteractive" apt-get install r-base r-base-dev -y
+
+# Install R Deseq2 dependencies
+RUN apt install libcurl4-openssl-dev
+RUN apt-get install libssl-dev
+RUN Rscript -e "install.packages('BiocManager')"
+RUN Rscript -e "install.packages('curl')"
+RUN Rscript -e "install.packages('openssl')"
+RUN Rscript -e "install.packages('httr')"
+RUN Rscript -e "BiocManager::install('UCSC.utils', ncpus=2)"
+RUN Rscript -e "BiocManager::install('GenomeInfoDb', ncpus=2)"
+RUN Rscript -e "BiocManager::install('GenomicRanges', ncpus=2)"
+RUN Rscript -e "BiocManager::install('SummarizedExperiment', ncpus=2)"
+
+# Install R Deseq2
+RUN Rscript -e "BiocManager::install('DESeq2', ncpus=2)"
