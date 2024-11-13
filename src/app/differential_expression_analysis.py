@@ -10,6 +10,7 @@ from pydeseq2.dds import DeseqDataSet # type: ignore
 os.environ["NUMBA_CACHE_DIR"] = "/tmp/" # Needed for scanpy to import properly
 import scanpy as sc # type: ignore
 import scipy.cluster.hierarchy as sch # type: ignore
+import subprocess
 
 class SampleMetaDataManager:
     def __init__(self, metadata_path: Path) -> None:
@@ -134,21 +135,23 @@ class DifferentialExpressionAnalysis:
         print(cell_lines)
 
         for cell_line in cell_lines:
-            # if cell_line != "R06E":
-            #     continue
+            if cell_line != "R06E":
+                continue
             print(f"Starting on cell line: {cell_line}")
             gene_counts_by_cell_line, sample_metadata_by_cell_line = self.filter_for_cell_line(gene_counts, sample_metadata, cell_line)
             gene_counts_by_cell_line, sample_metadata_by_cell_line = self.pickle_and_rectify_batch_effect(gene_counts_by_cell_line, sample_metadata_by_cell_line, cell_line)
             
             for virus in viruses:
                 gene_counts_by_virus, sample_metadata_by_virus = self.filter_for_virus(gene_counts_by_cell_line, sample_metadata_by_cell_line, virus)
-                self.write_input_data_for_log_ratio_test(gene_counts_by_virus, sample_metadata_by_virus, self.figure_dir)
-                # return
-            
+
                 dds = DeseqDataSet(counts=gene_counts_by_virus,
                                 metadata=sample_metadata_by_virus,
                                 design_factors=design_factors)
                 dds.deseq2()
+
+                lrt_results = self.perform_likelihood_ratio_test(gene_counts_by_virus, sample_metadata_by_virus, self.figure_dir)
+                self.lrt_sanity_check_graphs(lrt_results, dds)
+                return
 
                 dds.obs["Lib. Prep Batch"] = dds.obs["Lib. Prep Batch"].astype(int).astype(str)
                 self.perform_principal_component_analysis(dds, cell_line, virus, pca_color_factors)
@@ -244,12 +247,74 @@ class DifferentialExpressionAnalysis:
             label.set_color(color)
         plt.savefig(f"{figure_dir}dendrogram_{cell_line}_{virus}.png", bbox_inches="tight")
         
+    @classmethod
+    def perform_likelihood_ratio_test(cls, gene_counts: pd.DataFrame, sample_metadata: pd.DataFrame, write_directory: Path) -> pd.DataFrame:
+        gene_count_path, sample_metadata_path = cls.write_input_data_for_log_ratio_test(gene_counts, sample_metadata, write_directory)
+        r_lrt_results_path = Path(f"{write_directory}LRT_results.csv")
+
+        cls.run_r_lrt_command(gene_count_path, sample_metadata_path, r_lrt_results_path)
+        return pd.read_csv(r_lrt_results_path, index_col=0)
+
     @staticmethod
-    def write_input_data_for_log_ratio_test(gene_counts: pd.DataFrame, sample_metadata: pd.DataFrame, directory: Path) -> None:
+    def write_input_data_for_log_ratio_test(gene_counts: pd.DataFrame, sample_metadata: pd.DataFrame, directory: Path) -> tuple[str]:
         gene_count_outpath = f"{directory}gene_counts_R_input.csv"
         sample_metadata_outpath = f"{directory}sample_metadata_R_input.csv"
         gene_counts.to_csv(gene_count_outpath, index=True)
         sample_metadata.to_csv(sample_metadata_outpath, index=True)
+        return gene_count_outpath, sample_metadata_outpath
+    
+    @staticmethod
+    def run_r_lrt_command(gene_count_path: str, sample_metadata_path: str, r_lrt_results_path: Path) -> None:
+        print("Starting LRT in R")
+        r_lrt_command = ["Rscript", "/src/app/log_ratio_test.R",
+                         gene_count_path, sample_metadata_path, r_lrt_results_path]
+
+        p = subprocess.Popen(r_lrt_command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        while p.poll() is None and (line := p.stderr.readline()) != "":
+            pass
+        p.wait()
+        print(f"Exit code: {p.poll()}")
+
+        if p.poll() != 0:
+            raise Exception("R DESeq2 LRT did not complete successfully")
+
+    @classmethod
+    def lrt_sanity_check_graphs(cls, lrt_results: pd.DataFrame, dds: DeseqDataSet) -> None:
+        normalized_counts = cls.extract_normalized_count_df_from_dds(dds)
+        lrt_gene_ids_of_interest_parameters = [{"p_threshold": 0.05, "direction": "smaller"},
+                                               {"p_threshold": 0.5, "direction": "bigger"}]
+
+        for parameters in lrt_gene_ids_of_interest_parameters:
+            gene_ids_of_interest = cls.extract_lrt_gene_ids_of_interest_head(lrt_results, **parameters)
+            normalized_counts_of_interest = normalized_counts[gene_ids_of_interest].copy()
+            normalized_counts_of_interest["Time"] = dds.obs["Time"].astype(float).astype(int)
+            normalized_counts_of_interest["Virus"] = dds.obs["Virus"]
+            normalized_counts_of_interest["Color"] = normalized_counts_of_interest["Virus"].apply(lambda x: "Orange" if x == "No-Virus" else "Blue")
+
+            for gene_id in gene_ids_of_interest:
+                ax = normalized_counts_of_interest.groupby(["Time", "Virus"])[gene_id].mean().unstack().plot(legend=True)
+                normalized_counts_of_interest.plot(x="Time", y=gene_id, kind="scatter", ax=ax, color=normalized_counts_of_interest["Color"])
+
+                # TODO: Still need to add cell name and virus
+                figure_filename = f"{gene_id}_{parameters['p_threshold']}_{parameters['direction']}.png"
+                figure_outpath = f"/src/data/pydeseq2/gene_counts_by_time/{figure_filename}"
+                plt.savefig(figure_outpath, bbox_inches="tight")
+
+    @staticmethod
+    def extract_normalized_count_df_from_dds(dds: DeseqDataSet) -> pd.DataFrame:
+        normalized_counts = dds.layers["normed_counts"]
+        gene_ids = dds._var.index.to_list()
+        sample_ids = dds.obsm["design_matrix"].index.to_list()
+        return pd.DataFrame(normalized_counts, index=sample_ids, columns=gene_ids)
+    
+    @staticmethod
+    def extract_lrt_gene_ids_of_interest_head(lrt_results: pd.DataFrame, p_threshold: float, direction: str) -> list[str]:
+        if direction == "smaller":
+            significant_lrt_results = lrt_results[lrt_results["padj"] < p_threshold].sort_values("padj")
+        if direction == "bigger":
+            significant_lrt_results = lrt_results[lrt_results["padj"] > p_threshold].sort_values("padj")
+        sample_sig_results = significant_lrt_results.head(5)
+        return sample_sig_results.index.tolist()
 
 if __name__ == "__main__":
     parser = ArgumentParser()
