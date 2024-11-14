@@ -71,7 +71,7 @@ class GeneCountManager:
             gene_counts = self.combine_samples(gene_counts, samples_to_combine_path)
         gene_counts = self.rename_gene_count_ids(gene_counts, count_id_conversion)
         gene_counts = self.set_gene_id_as_index(gene_counts)
-        gene_counts = self.remove_all_zero_rows(gene_counts)
+        gene_counts = self.remove_low_count_rows(gene_counts)
         gene_counts = self.transpose_gene_counts(gene_counts)
         self.gene_counts = self.sort_by_index(gene_counts)
 
@@ -109,8 +109,8 @@ class GeneCountManager:
         return gene_counts.set_index("gene_id")
 
     @staticmethod
-    def remove_all_zero_rows(gene_counts: pd.DataFrame) -> pd.DataFrame:
-        return gene_counts[gene_counts.sum(axis = 1) > 0]
+    def remove_low_count_rows(gene_counts: pd.DataFrame, threshold: int = 10) -> pd.DataFrame:
+        return gene_counts[gene_counts.sum(axis = 1) > threshold]
     
     @staticmethod
     def transpose_gene_counts(gene_counts: pd.DataFrame) -> pd.DataFrame:
@@ -122,8 +122,10 @@ class GeneCountManager:
 
 class DifferentialExpressionAnalysis:
     def __init__(self):
-        self.figure_dir = "/src/data/pydeseq2/"
-        sc.settings.figdir = self.figure_dir
+        self.pca_figure_dir = "/src/data/pydeseq2/pca/"
+        sc.settings.figdir = self.pca_figure_dir
+        self.dendrogram_figure_dir = "/src/data/pydeseq2/dendrogram/"
+        self.lrt_dir = "/src/data/pydeseq2/lrt/"
 
     def run(self, gene_counts: pd.DataFrame, sample_metadata: pd.DataFrame) -> None:
         design_factors = ["Time", "Virus"] # Doesn't like Virus AND Treatment (redundancy probably)
@@ -149,14 +151,14 @@ class DifferentialExpressionAnalysis:
                                 design_factors=design_factors)
                 dds.deseq2()
 
-                lrt_results = self.perform_likelihood_ratio_test(gene_counts_by_virus, sample_metadata_by_virus, self.figure_dir)
+                lrt_results = self.perform_likelihood_ratio_test(gene_counts_by_virus, sample_metadata_by_virus, self.lrt_dir)
                 self.lrt_sanity_check_graphs(lrt_results, dds)
                 return
 
                 dds.obs["Lib. Prep Batch"] = dds.obs["Lib. Prep Batch"].astype(int).astype(str)
                 self.perform_principal_component_analysis(dds, cell_line, virus, pca_color_factors)
                 
-                self.perform_hierarchical_clustering(dds, cell_line, virus, self.figure_dir)
+                self.perform_hierarchical_clustering(dds, cell_line, virus, self.dendrogram_figure_dir)
 
     @staticmethod
     def remove_discrepant_sample_ids(gene_counts: pd.DataFrame, sample_metadata: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
