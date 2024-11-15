@@ -145,13 +145,14 @@ class DifferentialExpressionAnalysis:
             
             for virus in viruses:
                 gene_counts_by_virus, sample_metadata_by_virus = self.filter_for_virus(gene_counts_by_cell_line, sample_metadata_by_cell_line, virus)
+                lrt_results = self.perform_likelihood_ratio_test(gene_counts_by_virus, sample_metadata_by_virus, self.lrt_dir)
+                # NOTE: May want to get lrt hits without 0 time point, but then still include in later analyses and graphs
 
                 dds = DeseqDataSet(counts=gene_counts_by_virus,
                                 metadata=sample_metadata_by_virus,
                                 design_factors=design_factors)
                 dds.deseq2()
 
-                lrt_results = self.perform_likelihood_ratio_test(gene_counts_by_virus, sample_metadata_by_virus, self.lrt_dir)
                 self.lrt_sanity_check_graphs(lrt_results, dds)
                 return
 
@@ -272,12 +273,14 @@ class DifferentialExpressionAnalysis:
                          gene_count_path, sample_metadata_path, r_lrt_results_path]
 
         p = subprocess.Popen(r_lrt_command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-        while p.poll() is None and (line := p.stderr.readline()) != "":
+        while p.poll() is None and (line := p.stdout.readline()) != "":
             pass
         p.wait()
         print(f"Exit code: {p.poll()}")
 
         if p.poll() != 0:
+            for line in p.stderr.readlines():
+                print(line.strip())
             raise Exception("R DESeq2 LRT did not complete successfully")
 
     @classmethod
