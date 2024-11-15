@@ -66,3 +66,6 @@ RUN Rscript -e "BiocManager::install('SummarizedExperiment', ncpus=2)"
 
 # Install R Deseq2
 RUN Rscript -e "BiocManager::install('DESeq2', ncpus=2)"
+
+# Install R DEGreport
+RUN Rscript -e "BiocManager::install('DEGreport', ncpus=2)"
