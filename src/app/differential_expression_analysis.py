@@ -146,12 +146,14 @@ class DifferentialExpressionAnalysis:
             for virus in viruses:
                 gene_counts_by_virus, sample_metadata_by_virus = self.filter_for_virus(gene_counts_by_cell_line, sample_metadata_by_cell_line, virus)
                 lrt_results = self.perform_likelihood_ratio_test(gene_counts_by_virus, sample_metadata_by_virus, self.lrt_dir)
-                # NOTE: May want to get lrt hits without 0 time point, but then still include in later analyses and graphs
 
                 dds = DeseqDataSet(counts=gene_counts_by_virus,
                                 metadata=sample_metadata_by_virus,
                                 design_factors=design_factors)
                 dds.deseq2()
+                
+                self.perform_degpattern_clustering(lrt_results, dds, sample_metadata_by_virus)
+                return
 
                 self.lrt_sanity_check_graphs(lrt_results, dds)
                 return
@@ -252,11 +254,17 @@ class DifferentialExpressionAnalysis:
         
     @classmethod
     def perform_likelihood_ratio_test(cls, gene_counts: pd.DataFrame, sample_metadata: pd.DataFrame, write_directory: Path) -> pd.DataFrame:
+        gene_counts, sample_metadata = cls.remove_zero_time_point(gene_counts, sample_metadata)
         gene_count_path, sample_metadata_path = cls.write_input_data_for_log_ratio_test(gene_counts, sample_metadata, write_directory)
         r_lrt_results_path = Path(f"{write_directory}LRT_results.csv")
 
         cls.run_r_lrt_command(gene_count_path, sample_metadata_path, r_lrt_results_path)
         return pd.read_csv(r_lrt_results_path, index_col=0)
+
+    @classmethod
+    def remove_zero_time_point(cls, gene_counts: pd.DataFrame, sample_metadata: pd.DataFrame) -> tuple[pd.DataFrame]:
+        sample_metadata = sample_metadata[sample_metadata["Time"] != 0]
+        return cls.remove_discrepant_sample_ids(gene_counts, sample_metadata)
 
     @staticmethod
     def write_input_data_for_log_ratio_test(gene_counts: pd.DataFrame, sample_metadata: pd.DataFrame, directory: Path) -> tuple[str]:
@@ -320,6 +328,23 @@ class DifferentialExpressionAnalysis:
             significant_lrt_results = lrt_results[lrt_results["padj"] > p_threshold].sort_values("padj")
         sample_sig_results = significant_lrt_results.head(5)
         return sample_sig_results.index.tolist()
+
+    @classmethod
+    def perform_degpattern_clustering(cls, lrt_results: pd.DataFrame, dds: DeseqDataSet, sample_metadata: pd.DataFrame) -> None:
+        normalized_counts = cls.extract_normalized_count_df_from_dds(dds)
+        gene_ids_of_interest = lrt_results[lrt_results["padj"] < 0.05].sort_values("padj").index.tolist()
+        normalized_counts_of_interest = normalized_counts[gene_ids_of_interest].copy()
+
+        write_directory = Path("/src/data/pydeseq2/degpattern/")
+        gene_count_path, sample_metadata_path = cls.write_input_data_for_degpattern_clustering(normalized_counts_of_interest, sample_metadata, write_directory)
+
+    @staticmethod
+    def write_input_data_for_degpattern_clustering(gene_counts: pd.DataFrame, sample_metadata: pd.DataFrame, directory: Path) -> tuple[str]:
+        gene_count_outpath = directory / "gene_counts_degpattern_input.csv"
+        sample_metadata_outpath = directory / "sample_metadata_degpattern_input.csv"
+        gene_counts.to_csv(gene_count_outpath, index=True)
+        sample_metadata.to_csv(sample_metadata_outpath, index=True)
+        return gene_count_outpath, sample_metadata_outpath
 
 if __name__ == "__main__":
     parser = ArgumentParser()

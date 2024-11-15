@@ -151,3 +151,14 @@ singularity exec --pwd /src \
     "/src/data/pydeseq2/lrt/gene_counts_R_input.csv" \
     "/src/data/pydeseq2/lrt/sample_metadata_R_input.csv" \
     "/src/data/pydeseq2/lrt/LRT_results.csv"
+
+# To test R degpattern function
+singularity exec --pwd /src \
+    --no-home \
+    --env LC_ALL=C.UTF-8 \
+    --bind $HOST_APP_DIR:/src/app \
+    --bind $HOST_DATA_DESEQ_DIR:/src/data/pydeseq2 \
+    $SINGULARITY_IMAGE \
+    Rscript /src/app/degpattern_clustering.R \
+    "/src/data/pydeseq2/degpattern/gene_counts_degpattern_input.csv" \
+    "/src/data/pydeseq2/degpattern/sample_metadata_degpattern_input.csv"
