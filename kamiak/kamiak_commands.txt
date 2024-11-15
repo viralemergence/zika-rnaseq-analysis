@@ -148,6 +148,6 @@ singularity exec --pwd /src \
     --bind $HOST_DATA_DESEQ_DIR:/src/data/pydeseq2 \
     $SINGULARITY_IMAGE \
     Rscript /src/app/log_ratio_test.R \
-    "/src/data/pydeseq2/gene_counts_R_input.csv" \
-    "/src/data/pydeseq2/sample_metadata_R_input.csv" \
-    "/src/data/pydeseq2/LRT_results.csv"
+    "/src/data/pydeseq2/lrt/gene_counts_R_input.csv" \
+    "/src/data/pydeseq2/lrt/sample_metadata_R_input.csv" \
+    "/src/data/pydeseq2/lrt/LRT_results.csv"

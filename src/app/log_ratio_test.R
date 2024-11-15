@@ -1,6 +1,6 @@
-args = commandArgs(trailingOnly=TRUE)
-
 suppressMessages(library(DESeq2))
+
+args = commandArgs(trailingOnly=TRUE)
 
 gene_count_path <- args[1]
 sample_metadata_path <- args[2]
