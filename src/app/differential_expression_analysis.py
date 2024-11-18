@@ -332,6 +332,7 @@ class DifferentialExpressionAnalysis:
     @classmethod
     def perform_degpattern_clustering(cls, lrt_results: pd.DataFrame, dds: DeseqDataSet, sample_metadata: pd.DataFrame) -> None:
         normalized_counts = cls.extract_normalized_count_df_from_dds(dds)
+        normalized_counts, sample_metadata = cls.remove_zero_time_point(normalized_counts, sample_metadata) # NOTE: May not want this step
         gene_ids_of_interest = lrt_results[lrt_results["padj"] < 0.05].sort_values("padj").index.tolist()
         normalized_counts_of_interest = normalized_counts[gene_ids_of_interest].copy()
 
