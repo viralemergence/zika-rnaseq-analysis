@@ -161,4 +161,5 @@ singularity exec --pwd /src \
     $SINGULARITY_IMAGE \
     Rscript /src/app/degpattern_clustering.R \
     "/src/data/pydeseq2/degpattern/gene_counts_degpattern_input.csv" \
-    "/src/data/pydeseq2/degpattern/sample_metadata_degpattern_input.csv"
+    "/src/data/pydeseq2/degpattern/sample_metadata_degpattern_input.csv" \
+    "/src/data/pydeseq2/degpattern/gene_clusters.csv"

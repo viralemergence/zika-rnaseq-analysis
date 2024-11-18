@@ -126,6 +126,7 @@ class DifferentialExpressionAnalysis:
         sc.settings.figdir = self.pca_figure_dir
         self.dendrogram_figure_dir = "/src/data/pydeseq2/dendrogram/"
         self.lrt_dir = "/src/data/pydeseq2/lrt/"
+        self.degpatterns_dir = Path("/src/data/pydeseq2/degpatterns/")
 
     def run(self, gene_counts: pd.DataFrame, sample_metadata: pd.DataFrame) -> None:
         design_factors = ["Time", "Virus"] # Doesn't like Virus AND Treatment (redundancy probably)
@@ -152,7 +153,8 @@ class DifferentialExpressionAnalysis:
                                 design_factors=design_factors)
                 dds.deseq2()
                 
-                self.perform_degpattern_clustering(lrt_results, dds, sample_metadata_by_virus)
+                gene_clusters = self.perform_degpatterns_clustering(lrt_results, dds, sample_metadata_by_virus, self.degpatterns_dir)
+                print(gene_clusters)
                 return
 
                 self.lrt_sanity_check_graphs(lrt_results, dds)
@@ -294,11 +296,11 @@ class DifferentialExpressionAnalysis:
     @classmethod
     def lrt_sanity_check_graphs(cls, lrt_results: pd.DataFrame, dds: DeseqDataSet) -> None:
         normalized_counts = cls.extract_normalized_count_df_from_dds(dds)
-        lrt_gene_ids_of_interest_parameters = [{"p_threshold": 0.05, "direction": "smaller"},
-                                               {"p_threshold": 0.5, "direction": "bigger"}]
+        lrt_gene_ids_of_interest_parameters = [{"p_threshold": 0.05, "direction": "smaller", "head": True},
+                                               {"p_threshold": 0.5, "direction": "bigger", "head": True}]
 
         for parameters in lrt_gene_ids_of_interest_parameters:
-            gene_ids_of_interest = cls.extract_lrt_gene_ids_of_interest_head(lrt_results, **parameters)
+            gene_ids_of_interest = cls.extract_lrt_gene_ids_of_interest(lrt_results, **parameters)
             normalized_counts_of_interest = normalized_counts[gene_ids_of_interest].copy()
             normalized_counts_of_interest["Time"] = dds.obs["Time"].astype(float).astype(int)
             normalized_counts_of_interest["Virus"] = dds.obs["Virus"]
@@ -321,23 +323,27 @@ class DifferentialExpressionAnalysis:
         return pd.DataFrame(normalized_counts, index=sample_ids, columns=gene_ids)
     
     @staticmethod
-    def extract_lrt_gene_ids_of_interest_head(lrt_results: pd.DataFrame, p_threshold: float, direction: str) -> list[str]:
+    def extract_lrt_gene_ids_of_interest(lrt_results: pd.DataFrame, p_threshold: float, direction: str, head: bool = False) -> list[str]:
         if direction == "smaller":
             significant_lrt_results = lrt_results[lrt_results["padj"] < p_threshold].sort_values("padj")
         if direction == "bigger":
             significant_lrt_results = lrt_results[lrt_results["padj"] > p_threshold].sort_values("padj")
-        sample_sig_results = significant_lrt_results.head(5)
-        return sample_sig_results.index.tolist()
+        
+        if head:
+            return significant_lrt_results.head(5).index.tolist()
+        return significant_lrt_results.index.tolist()
 
     @classmethod
-    def perform_degpattern_clustering(cls, lrt_results: pd.DataFrame, dds: DeseqDataSet, sample_metadata: pd.DataFrame) -> None:
+    def perform_degpatterns_clustering(cls, lrt_results: pd.DataFrame, dds: DeseqDataSet, sample_metadata: pd.DataFrame, write_directory: Path) -> dict[int]:
+        gene_ids_of_interest = cls.extract_lrt_gene_ids_of_interest(lrt_results, 0.05, "smaller")
         normalized_counts = cls.extract_normalized_count_df_from_dds(dds)
         normalized_counts, sample_metadata = cls.remove_zero_time_point(normalized_counts, sample_metadata) # NOTE: May not want this step
-        gene_ids_of_interest = lrt_results[lrt_results["padj"] < 0.05].sort_values("padj").index.tolist()
         normalized_counts_of_interest = normalized_counts[gene_ids_of_interest].copy()
 
-        write_directory = Path("/src/data/pydeseq2/degpattern/")
         gene_count_path, sample_metadata_path = cls.write_input_data_for_degpattern_clustering(normalized_counts_of_interest, sample_metadata, write_directory)
+        degpattern_results_path = write_directory / "gene_clusters.csv"
+        cls.run_r_degpatterns_command(gene_count_path, sample_metadata_path, degpattern_results_path)
+        return dict(pd.read_csv(degpattern_results_path).values)
 
     @staticmethod
     def write_input_data_for_degpattern_clustering(gene_counts: pd.DataFrame, sample_metadata: pd.DataFrame, directory: Path) -> tuple[str]:
@@ -346,6 +352,23 @@ class DifferentialExpressionAnalysis:
         gene_counts.to_csv(gene_count_outpath, index=True)
         sample_metadata.to_csv(sample_metadata_outpath, index=True)
         return gene_count_outpath, sample_metadata_outpath
+
+    @staticmethod
+    def run_r_degpatterns_command(gene_count_path: str, sample_metadata_path: str, degpattern_results_path: Path) -> None:
+        print("Starting degPatterns in R")
+        r_degpatterns_command = ["Rscript", "/src/app/degpattern_clustering.R",
+                         gene_count_path, sample_metadata_path, degpattern_results_path]
+
+        p = subprocess.Popen(r_degpatterns_command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        while p.poll() is None and (line := p.stdout.readline()) != "":
+            pass
+        p.wait()
+        print(f"Exit code: {p.poll()}")
+
+        if p.poll() != 0:
+            for line in p.stderr.readlines():
+                print(line.strip())
+            raise Exception("R degPatterns did not complete successfully")
 
 if __name__ == "__main__":
     parser = ArgumentParser()
