@@ -69,3 +69,6 @@ RUN Rscript -e "BiocManager::install('DESeq2', ncpus=2)"
 
 # Install R DEGreport
 RUN Rscript -e "BiocManager::install('DEGreport', ncpus=2)"
+
+# Install goatools
+RUN pip3 install goatools==1.4.12
