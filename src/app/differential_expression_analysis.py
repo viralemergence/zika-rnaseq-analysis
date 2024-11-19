@@ -125,7 +125,7 @@ class DifferentialExpressionAnalysis:
         self.pca_figure_dir = "/src/data/pydeseq2/pca/"
         sc.settings.figdir = self.pca_figure_dir
         self.dendrogram_figure_dir = "/src/data/pydeseq2/dendrogram/"
-        self.lrt_dir = "/src/data/pydeseq2/lrt/"
+        self.lrt_dir = Path("/src/data/pydeseq2/lrt/")
         self.degpatterns_dir = Path("/src/data/pydeseq2/degpatterns/")
 
     def run(self, gene_counts: pd.DataFrame, sample_metadata: pd.DataFrame) -> None:
@@ -258,7 +258,7 @@ class DifferentialExpressionAnalysis:
     def perform_likelihood_ratio_test(cls, gene_counts: pd.DataFrame, sample_metadata: pd.DataFrame, write_directory: Path) -> pd.DataFrame:
         gene_counts, sample_metadata = cls.remove_zero_time_point(gene_counts, sample_metadata)
         gene_count_path, sample_metadata_path = cls.write_input_data_for_log_ratio_test(gene_counts, sample_metadata, write_directory)
-        r_lrt_results_path = Path(f"{write_directory}LRT_results.csv")
+        r_lrt_results_path = write_directory / "LRT_results.csv"
 
         cls.run_r_lrt_command(gene_count_path, sample_metadata_path, r_lrt_results_path)
         return pd.read_csv(r_lrt_results_path, index_col=0)
@@ -270,8 +270,8 @@ class DifferentialExpressionAnalysis:
 
     @staticmethod
     def write_input_data_for_log_ratio_test(gene_counts: pd.DataFrame, sample_metadata: pd.DataFrame, directory: Path) -> tuple[str]:
-        gene_count_outpath = f"{directory}gene_counts_R_input.csv"
-        sample_metadata_outpath = f"{directory}sample_metadata_R_input.csv"
+        gene_count_outpath = directory / "gene_counts_R_input.csv"
+        sample_metadata_outpath = directory / "sample_metadata_R_input.csv"
         gene_counts.to_csv(gene_count_outpath, index=True)
         sample_metadata.to_csv(sample_metadata_outpath, index=True)
         return gene_count_outpath, sample_metadata_outpath
