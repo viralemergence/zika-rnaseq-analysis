@@ -163,3 +163,11 @@ singularity exec --pwd /src \
     "/src/data/pydeseq2/degpattern/gene_counts_degpattern_input.csv" \
     "/src/data/pydeseq2/degpattern/sample_metadata_degpattern_input.csv" \
     "/src/data/pydeseq2/degpattern/gene_clusters.csv"
+
+# To test goatools
+singularity exec --pwd /src \
+    --no-home \
+    --bind $HOST_APP_DIR:/src/app \
+    --bind $HOST_DATA_DESEQ_DIR:/src/data/pydeseq2 \
+    $SINGULARITY_IMAGE \
+    python3 -u /src/app/goatools_chiroptera.py
