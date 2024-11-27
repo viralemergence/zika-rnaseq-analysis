@@ -72,3 +72,21 @@ RUN Rscript -e "BiocManager::install('DEGreport', ncpus=2)"
 
 # Install goatools
 RUN pip3 install goatools==1.4.12
+
+# Install GOMCL dependencies
+# mcl is Markov Clustering Algorithm
+RUN pip3 install networkx==3.4.2 \
+    && apt-get install -y unzip \
+    && apt-get install mcl=1:14-137+ds-9build2
+
+# Install GOMCL
+RUN wget https://github.com/Guannan-Wang/GOMCL/archive/refs/heads/master.zip -P /src/tools/ \
+    && unzip /src/tools/master.zip -d /src/tools/ \
+    && rm /src/tools/master.zip \
+    && unzip /src/tools/GOMCL-master/GOMCL-py3.zip -d /src/tools/ \
+    && rm -r /src/tools/GOMCL-master/ \
+    && chmod a+x /src/tools/GOMCL-py3/GOMCL.py \
+    && sed -i '1 s/^.*$/#!\/usr\/bin\/env python3/' /src/tools/GOMCL-py3/GOMCL.py
+
+# Configure GOMCL
+ENV PATH="/src/tools/GOMCL-py3:$PATH"

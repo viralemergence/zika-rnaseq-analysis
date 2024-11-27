@@ -27,3 +27,16 @@ sudo docker run --rm -v `pwd`/src/data:/src/data \
     -o /src/data/sampled_R1_processed.fastq.gz -O /src/data/sampled_R2_processed.fastq.gz \
     -h /src/data/fastp.html \
     -j /src/data/fastp.json
+
+# Set up OBO file
+mkdir src/data/
+wget http://purl.obolibrary.org/obo/go/go-basic.obo -O src/data/go-basic.obo
+wget https://github.com/Guannan-Wang/GOMCL/raw/refs/heads/master/tests/Wendrich_PNAS_SD2_LR_TMO5_H_vs_L.bgo -O src/data/Wendrich_PNAS_SD2_LR_TMO5_H_vs_L.bgo
+
+# To run test dataset
+time sudo docker run --rm -v `pwd`/src/data:/src/data \
+    zika \
+    GOMCL.py \
+    /src/data/go-basic.obo \
+    /src/data/Wendrich_PNAS_SD2_LR_TMO5_H_vs_L.bgo \
+    -gotype BP CC MF
