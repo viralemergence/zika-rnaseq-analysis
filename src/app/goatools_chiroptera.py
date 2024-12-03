@@ -1,33 +1,43 @@
 from collections import defaultdict
 from csv import reader
 from goatools.anno.genetogo_reader import Gene2GoReader
-from goatools.base import download_go_basic_obo, dnld_file
+from goatools.base import dnld_file
 from goatools.go_enrichment import GOEnrichmentStudy
+from goatools.mapslim import mapslim
 from goatools.obo_parser import GODag
 from pathlib import Path
 
 class GoatoolsManager:
     def __init__(self) -> None:
-        self.background_genes_path = Path("/src/data/pydeseq2/goatools/ncbi_gene_results.txt")
-        self.obo_path = Path("/src/data/pydeseq2/goatools/go-basic.obo")
+        self.background_genes_path = Path("/src/data/go_analysis/ncbi_gene_results.txt")
+        self.obo_ftp_path = "http://current.geneontology.org/ontology/go.obo"
+        self.obo_path = Path("/src/data/go_analysis/go.obo")
+        self.slim_obo_ftp_path = "https://current.geneontology.org/ontology/subsets/goslim_agr.obo"
+        self.slim_obo_path = Path("/src/data/go_analysis/goslim-agr.obo")
         self.gene2go_ftp_path = "ftp://ftp.ncbi.nlm.nih.gov/gene/DATA/gene2go.gz"
-        self.gene2go_path = Path("/src/data/pydeseq2/goatools/gene2go.txt")
+        self.gene2go_path = Path("/src/data/go_analysis/gene2go.txt")
         self.study_genes_path = Path("/src/data/pydeseq2/degpatterns/gene_clusters.csv")
+        self.outpath = Path("/src/data/go_analysis/goatools_results.csv")
+        
+        self.taxon_id = 9407
 
     def setup(self) -> None:
-        download_go_basic_obo(str(self.obo_path))
+        dnld_file(self.obo_ftp_path, str(self.obo_path))
         dnld_file(self.gene2go_ftp_path, str(self.gene2go_path))
+        dnld_file(self.slim_obo_ftp_path, str(self.slim_obo_path))
         self.get_background_genes(self.background_genes_path)
         
     def run(self) -> None:
         background_genes = self.extract_background_genes(self.background_genes_path)
         symbol_id_mapper = self.set_symbol_id_mapper(self.background_genes_path)
+        id_symbol_mapper = {id: symbol for symbol, id in symbol_id_mapper.items()}
         study_genes = self.extract_study_genes(self.study_genes_path)
         study_genes = self.convert_study_gene_symbols(study_genes, symbol_id_mapper)
 
-        godag = GODag(self.obo_path)
+        godag = GODag(str(self.obo_path), optional_attrs=["relationship"])
+        goslim_dag = GODag(str(self.slim_obo_path), optional_attrs=["relationship"])
 
-        objanno = Gene2GoReader(str(self.gene2go_path), taxids=[9407])
+        objanno = Gene2GoReader(str(self.gene2go_path), taxids=[self.taxon_id])
         ns2assoc = objanno.get_ns2assc()
         id2gos = defaultdict(set)
         for _, associations in ns2assoc.items():
@@ -38,19 +48,31 @@ class GoatoolsManager:
             background_genes,
             id2gos,
             godag,
+            propogate_counts=True,
             methods=['bonferroni', 'fdr_bh'],
             pvalcalc='fisher_scipy_stats'
             )
         results = goeaobj.run_study_nts(study_genes)
 
-        sig_results = [r for r in results if r.p_uncorrected < 0.05] # TODO: May want to parse by minimum gene count as well
-        print(len(sig_results))
-        for i, r in enumerate(sig_results):
-            if i > 10:
-                break
-            info = [str(s) for s in [r.GO, r.goterm.name, round(r.p_uncorrected, 5), round(r.p_fdr_bh, 5), r.ratio_in_study[0], r.ratio_in_study[1]]]
-            print(info)
-            print()
+        sig_results = [r for r in results if r.p_uncorrected < 0.05]
+        most_genes_per_term_results = sorted(sig_results, key=lambda r: r.ratio_in_study[0], reverse=True)
+        sig_results = most_genes_per_term_results
+        
+        with self.outpath.open("w") as outhandle:
+            for r in sig_results:
+                go_genes = [id_symbol_mapper[gene] for gene in r.study_items]
+                if len(go_genes) < 2: # NOTE: May want to modulate threshold
+                    continue
+                direct_ancestors, all_ancestors = mapslim(r.GO, godag, goslim_dag)
+                if direct_ancestors != all_ancestors:
+                    print(r.GO)
+                if len(all_ancestors) == 0:
+                    all_ancestors = ["NONE"]
+                go_genes = "|".join(go_genes)
+                all_ancestors = "|".join(all_ancestors)
+                info = [r.GO, r.goterm.name, round(r.p_uncorrected, 5), round(r.p_fdr_bh, 5), r.ratio_in_study[0], r.ratio_in_study[1], go_genes, all_ancestors]
+                info = ",".join([str(s) for s in info])
+                outhandle.write(info + "\n")
 
     @staticmethod
     def get_background_genes(background_genes_path: Path) -> None:
