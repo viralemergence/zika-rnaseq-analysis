@@ -1,3 +1,4 @@
+from argparse import ArgumentParser
 from collections import defaultdict
 from csv import reader, DictWriter
 from goatools.anno.genetogo_reader import Gene2GoReader # type: ignore
@@ -8,10 +9,12 @@ from goatools.obo_parser import GODag # type: ignore
 from pathlib import Path
 
 class GoatoolsManager:
-    def __init__(self, taxon_id: int) -> None:
+    def __init__(self, taxon_id: int, background_genes_path: str, study_genes_path: str) -> None:
+        self.taxon_id = taxon_id
+
         # Background and study genes for enrichment analysis
-        self.background_genes_path = Path("/src/data/go_analysis/ncbi_gene_results.txt") # TODO: Make taxon specific
-        self.study_genes_path = Path("/src/data/pydeseq2/degpatterns/gene_clusters.csv") # TODO: Make cell line & virus specific
+        self.background_genes_path = Path(background_genes_path)
+        self.study_genes_path = Path(study_genes_path)
 
         # Full and slim GO terms in obo format
         self.obo_ftp_path = "http://current.geneontology.org/ontology/go.obo"
@@ -22,11 +25,10 @@ class GoatoolsManager:
         # gene2go and taxon specific gene2go info
         self.gene2go_ftp_path = "ftp://ftp.ncbi.nlm.nih.gov/gene/DATA/gene2go.gz"
         self.gene2go_path = Path("/src/data/go_analysis/gene2go.txt")
-        self.taxon_id = taxon_id
         self.gene2go_taxon_path = Path(f"/src/data/go_analysis/gene2go_{self.taxon_id}.txt")
 
         # Final results path
-        self.outpath = Path("/src/data/go_analysis/goatools_results.csv") # TODO: Change to use input file name
+        self.outpath = Path("/src/data/go_analysis/") / f"{self.study_genes_path.stem}_goatools_results.csv"
 
     def setup(self) -> None:
         if not self.gene2go_taxon_path.is_file():
@@ -130,8 +132,8 @@ class GoatoolsManager:
         return gene_go_terms
 
 class GoatoolsResultsManager(GoatoolsManager):
-    def __init__(self, taxon_id: int) -> None:
-        super().__init__(taxon_id)
+    def __init__(self, taxon_id: int, background_genes_path: str, study_genes_path: str) -> None:
+        super().__init__(taxon_id, background_genes_path, study_genes_path)
 
     def run(self, goatools_results: list) -> None:
         symbol_id_mapper = self.set_symbol_id_mapper(self.background_genes_path)
@@ -200,7 +202,7 @@ class GoatoolsResultsManager(GoatoolsManager):
             most_significant_result_info = {"most_significant_go_id": msr["go_id"],
                                             "most_significant_go_name": msr["go_name"],
                                             "most_significant_p_val": msr["p-val"],
-                                            "most_significant_study_genes": "|".join(msr["genes"])}
+                                            "most_significant_study_genes": "|".join(sorted(msr["genes"]))}
             group_info.update(most_significant_result_info)
 
             largest_result = sorted(results, key=lambda result: len(result["genes"]), reverse=True)[0]
@@ -208,17 +210,26 @@ class GoatoolsResultsManager(GoatoolsManager):
             largest_result_info = {"largest_go_id": lr["go_id"],
                                    "largest_go_name": lr["go_name"],
                                    "largest_p_val": lr["p-val"],
-                                   "largest_study_genes": "|".join(lr["genes"])}
+                                   "largest_study_genes": "|".join(sorted(lr["genes"]))}
             group_info.update(largest_result_info)
             
             grouped_results_highlights.append(group_info)
         return sorted(grouped_results_highlights, key=lambda result: result["most_significant_p_val"])
 
 if __name__ == "__main__":
-    taxon_id = 9407
-    gm = GoatoolsManager(taxon_id)
+    parser = ArgumentParser()
+    parser.add_argument("-t", "--taxon_id", type=int, required=True)
+    parser.add_argument("-b", "--background_genes", type=str, required=True)
+    parser.add_argument("-s", "--study_genes", type=str, required=True)
+    args = parser.parse_args()
+
+    taxon_id = args.taxon_id
+    background_genes_path = args.background_genes
+    study_genes_path = args.study_genes
+
+    gm = GoatoolsManager(taxon_id, background_genes_path, study_genes_path)
     gm.setup()
     results = gm.run()
     
-    grm = GoatoolsResultsManager(taxon_id)
+    grm = GoatoolsResultsManager(taxon_id, background_genes_path, study_genes_path)
     grm.run(results)
