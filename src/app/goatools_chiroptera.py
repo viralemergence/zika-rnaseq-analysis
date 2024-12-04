@@ -10,8 +10,8 @@ from pathlib import Path
 class GoatoolsManager:
     def __init__(self, taxon_id: int) -> None:
         # Background and study genes for enrichment analysis
-        self.background_genes_path = Path("/src/data/go_analysis/ncbi_gene_results.txt")
-        self.study_genes_path = Path("/src/data/pydeseq2/degpatterns/gene_clusters.csv")
+        self.background_genes_path = Path("/src/data/go_analysis/ncbi_gene_results.txt") # TODO: Make taxon specific
+        self.study_genes_path = Path("/src/data/pydeseq2/degpatterns/gene_clusters.csv") # TODO: Make cell line & virus specific
 
         # Full and slim GO terms in obo format
         self.obo_ftp_path = "http://current.geneontology.org/ontology/go.obo"
@@ -26,7 +26,7 @@ class GoatoolsManager:
         self.gene2go_taxon_path = Path(f"/src/data/go_analysis/gene2go_{self.taxon_id}.txt")
 
         # Final results path
-        self.outpath = Path("/src/data/go_analysis/goatools_results.csv")
+        self.outpath = Path("/src/data/go_analysis/goatools_results.csv") # TODO: Change to use input file name
 
     def setup(self) -> None:
         if not self.gene2go_taxon_path.is_file():
@@ -38,7 +38,7 @@ class GoatoolsManager:
         
     @staticmethod
     def filter_gene2go_by_taxon_id(gene2go_path: Path, gene2go_taxon_path: Path, taxon_id: int) -> None:
-        # Creating a taxon specific gene2go file dramatically increases Gene2GoReader load time
+        # Creating a taxon specific gene2go file dramatically reduces Gene2GoReader load time
         with gene2go_path.open() as inhandle, gene2go_taxon_path.open("w") as outhandle:
             reader_iterator = reader(inhandle, delimiter="\t")
             header = next(reader_iterator)
@@ -58,81 +58,21 @@ class GoatoolsManager:
         # Send to file (must be tabular)
         pass
 
-    def run(self) -> None:
+    def run(self) -> list:
+        # Returns list of goatools result objects
         background_genes = self.extract_background_genes(self.background_genes_path)
         symbol_id_mapper = self.set_symbol_id_mapper(self.background_genes_path)
-        id_symbol_mapper = {id: symbol for symbol, id in symbol_id_mapper.items()}
-        study_genes = self.extract_study_genes(self.study_genes_path)
-        study_genes = self.convert_study_gene_symbols(study_genes, symbol_id_mapper)
+        study_genes_symbol = self.extract_study_genes(self.study_genes_path)
+        study_genes = self.convert_study_gene_symbols(study_genes_symbol, symbol_id_mapper)
 
         godag = GODag(str(self.obo_path), optional_attrs=["relationship"])
-        goslim_dag = GODag(str(self.slim_obo_path), optional_attrs=["relationship"])
 
-        objanno = Gene2GoReader(str(self.gene2go_taxon_path), taxids=[self.taxon_id])
-        ns2assoc = objanno.get_ns2assc()
-        id2gos = defaultdict(set)
-        for _, associations in ns2assoc.items():
-            for gene_id, go_terms in associations.items():
-                id2gos[gene_id].update(go_terms)
+        namespace_associations = Gene2GoReader(str(self.gene2go_taxon_path), taxids=[self.taxon_id]).get_ns2assc()
+        gene_go_terms = self.extract_gene_go_terms(namespace_associations)
 
-        goeaobj = GOEnrichmentStudy(
-            background_genes,
-            id2gos,
-            godag,
-            propogate_counts=True,
-            methods=['bonferroni', 'fdr_bh'],
-            pvalcalc='fisher_scipy_stats'
-            )
-        results = goeaobj.run_study_nts(study_genes)
-
-        sig_results = [r for r in results if r.p_uncorrected < 0.05]
-        most_genes_per_term_results = sorted(sig_results, key=lambda r: r.ratio_in_study[0], reverse=True)
-        sig_results = most_genes_per_term_results
-        
-        grouped_results = defaultdict(list)
-        for r in sig_results:
-            go_genes = [id_symbol_mapper[gene] for gene in r.study_items]
-            if len(go_genes) < 2: # NOTE: May want to modulate threshold
-                continue
-
-            group_go_term = self.calculate_group_go_term(r.GO, godag, goslim_dag)
-            
-            info = {"go_id": r.GO,
-                    "go_name": f'"{r.goterm.name}"',
-                    "p-val": round(r.p_uncorrected, 5),
-                    "genes": go_genes}
-            grouped_results[group_go_term].append(info)
-
-        grouped_results_highlights = list()
-        for group_go_id, results in grouped_results.items():
-            group_info = {"group_go_id": group_go_id,
-                          "group_go_name": f'"{godag[group_go_id].name}"'}
-
-            most_significant_result = sorted(results, key=lambda result: result["p-val"])[0]
-            msr = most_significant_result
-            most_significant_result_info = {"most_significant_go_id": msr["go_id"],
-                                            "most_significant_go_name": msr["go_name"],
-                                            "most_significant_p_val": msr["p-val"],
-                                            "most_significant_study_genes": "|".join(msr["genes"])}
-            group_info.update(most_significant_result_info)
-
-            largest_result = sorted(results, key=lambda result: len(result["genes"]), reverse=True)[0]
-            lr = largest_result
-            largest_result_info = {"largest_go_id": lr["go_id"],
-                                   "largest_go_name": lr["go_name"],
-                                   "largest_p_val": lr["p-val"],
-                                   "largest_study_genes": "|".join(lr["genes"])}
-            group_info.update(largest_result_info)
-            
-            grouped_results_highlights.append(group_info)
-        
-        grouped_results_highlights = sorted(grouped_results_highlights, key=lambda result: result["most_significant_p_val"])
-        
-        with self.outpath.open("w") as outhandle:
-            header = grouped_results_highlights[0].keys()
-            writer = DictWriter(outhandle, fieldnames=header)
-            writer.writeheader()
-            writer.writerows(grouped_results_highlights)
+        go_enrichment_analysis = GOEnrichmentStudy(background_genes, gene_go_terms, godag,
+                                    methods=['bonferroni'], pvalcalc='fisher_scipy_stats')
+        return go_enrichment_analysis.run_study_nts(study_genes)
     
     @staticmethod
     def extract_background_genes(background_genes_path: Path) -> set[str]:
@@ -181,6 +121,56 @@ class GoatoolsManager:
                 continue
         return converted_study_genes
 
+    @staticmethod
+    def extract_gene_go_terms(namespace_associations: dict[dict[set]]) -> dict[set]:
+        gene_go_terms = defaultdict(set)
+        for _, associations in namespace_associations.items():
+            for gene_id, go_terms in associations.items():
+                gene_go_terms[gene_id].update(go_terms)
+        return gene_go_terms
+
+class GoatoolsResultsManager(GoatoolsManager):
+    def __init__(self, taxon_id: int) -> None:
+        super().__init__(taxon_id)
+
+    def run(self, goatools_results: list) -> None:
+        symbol_id_mapper = self.set_symbol_id_mapper(self.background_genes_path)
+        id_symbol_mapper = {id: symbol for symbol, id in symbol_id_mapper.items()}
+
+        godag = GODag(str(self.obo_path), optional_attrs=["relationship"])
+        goslim_dag = GODag(str(self.slim_obo_path), optional_attrs=["relationship"])
+
+        significant_results = self.extract_significant_results(goatools_results)
+        grouped_results = self.group_go_terms(significant_results, id_symbol_mapper, godag, goslim_dag)
+        grouped_results_highlights = self.extract_highlights_from_grouped_go_terms(grouped_results, godag)
+        
+        with self.outpath.open("w") as outhandle:
+            header = grouped_results_highlights[0].keys()
+            writer = DictWriter(outhandle, fieldnames=header)
+            writer.writeheader()
+            writer.writerows(grouped_results_highlights)
+
+    @staticmethod
+    def extract_significant_results(results: list) -> list:
+        return [r for r in results if r.p_uncorrected < 0.05]
+
+    @classmethod
+    def group_go_terms(cls, results: list, id_symbol_mapper: dict[str], godag: GODag, goslim_dag: GODag) -> dict[list[dict]]:
+        grouped_results = defaultdict(list)
+        for r in results:
+            go_genes = [id_symbol_mapper[gene] for gene in r.study_items]
+            if len(go_genes) < 2: # NOTE: May want to modulate threshold
+                continue
+
+            group_go_term = cls.calculate_group_go_term(r.GO, godag, goslim_dag)
+            
+            info = {"go_id": r.GO,
+                    "go_name": f'"{r.goterm.name}"',
+                    "p-val": round(r.p_uncorrected, 5),
+                    "genes": go_genes}
+            grouped_results[group_go_term].append(info)
+        return grouped_results
+
     @classmethod
     def calculate_group_go_term(cls, go_term: str, godag: GODag, goslim_dag: GODag) -> str:
         direct_ancestors, all_ancestors = mapslim(go_term, godag, goslim_dag)
@@ -198,8 +188,37 @@ class GoatoolsManager:
             ancestor_levels[ancestor] = godag[ancestor].level
         return max(ancestor_levels, key= lambda x: ancestor_levels[x])
 
+    @staticmethod
+    def extract_highlights_from_grouped_go_terms(grouped_results: dict[list[dict]], godag: GODag) -> list[dict]:
+        grouped_results_highlights = list()
+        for group_go_id, results in grouped_results.items():
+            group_info = {"group_go_id": group_go_id,
+                          "group_go_name": f'"{godag[group_go_id].name}"'}
+
+            most_significant_result = sorted(results, key=lambda result: result["p-val"])[0]
+            msr = most_significant_result
+            most_significant_result_info = {"most_significant_go_id": msr["go_id"],
+                                            "most_significant_go_name": msr["go_name"],
+                                            "most_significant_p_val": msr["p-val"],
+                                            "most_significant_study_genes": "|".join(msr["genes"])}
+            group_info.update(most_significant_result_info)
+
+            largest_result = sorted(results, key=lambda result: len(result["genes"]), reverse=True)[0]
+            lr = largest_result
+            largest_result_info = {"largest_go_id": lr["go_id"],
+                                   "largest_go_name": lr["go_name"],
+                                   "largest_p_val": lr["p-val"],
+                                   "largest_study_genes": "|".join(lr["genes"])}
+            group_info.update(largest_result_info)
+            
+            grouped_results_highlights.append(group_info)
+        return sorted(grouped_results_highlights, key=lambda result: result["most_significant_p_val"])
+
 if __name__ == "__main__":
     taxon_id = 9407
     gm = GoatoolsManager(taxon_id)
     gm.setup()
-    gm.run()
+    results = gm.run()
+    
+    grm = GoatoolsResultsManager(taxon_id)
+    grm.run(results)
