@@ -1,5 +1,5 @@
 from collections import defaultdict
-from csv import reader
+from csv import reader, DictWriter
 from goatools.anno.genetogo_reader import Gene2GoReader # type: ignore
 from goatools.base import dnld_file # type: ignore
 from goatools.go_enrichment import GOEnrichmentStudy # type: ignore
@@ -89,21 +89,50 @@ class GoatoolsManager:
         most_genes_per_term_results = sorted(sig_results, key=lambda r: r.ratio_in_study[0], reverse=True)
         sig_results = most_genes_per_term_results
         
+        grouped_results = defaultdict(list)
+        for r in sig_results:
+            go_genes = [id_symbol_mapper[gene] for gene in r.study_items]
+            if len(go_genes) < 2: # NOTE: May want to modulate threshold
+                continue
+
+            group_go_term = self.calculate_group_go_term(r.GO, godag, goslim_dag)
+            
+            info = {"go_id": r.GO,
+                    "go_name": f'"{r.goterm.name}"',
+                    "p-val": round(r.p_uncorrected, 5),
+                    "genes": go_genes}
+            grouped_results[group_go_term].append(info)
+
+        grouped_results_highlights = list()
+        for group_go_id, results in grouped_results.items():
+            group_info = {"group_go_id": group_go_id,
+                          "group_go_name": f'"{godag[group_go_id].name}"'}
+
+            most_significant_result = sorted(results, key=lambda result: result["p-val"])[0]
+            msr = most_significant_result
+            most_significant_result_info = {"most_significant_go_id": msr["go_id"],
+                                            "most_significant_go_name": msr["go_name"],
+                                            "most_significant_p_val": msr["p-val"],
+                                            "most_significant_study_genes": "|".join(msr["genes"])}
+            group_info.update(most_significant_result_info)
+
+            largest_result = sorted(results, key=lambda result: len(result["genes"]), reverse=True)[0]
+            lr = largest_result
+            largest_result_info = {"largest_go_id": lr["go_id"],
+                                   "largest_go_name": lr["go_name"],
+                                   "largest_p_val": lr["p-val"],
+                                   "largest_study_genes": "|".join(lr["genes"])}
+            group_info.update(largest_result_info)
+            
+            grouped_results_highlights.append(group_info)
+        
+        grouped_results_highlights = sorted(grouped_results_highlights, key=lambda result: result["most_significant_p_val"])
+        
         with self.outpath.open("w") as outhandle:
-            for r in sig_results:
-                go_genes = [id_symbol_mapper[gene] for gene in r.study_items]
-                if len(go_genes) < 2: # NOTE: May want to modulate threshold
-                    continue
-                direct_ancestors, all_ancestors = mapslim(r.GO, godag, goslim_dag)
-                if direct_ancestors != all_ancestors:
-                    print(r.GO)
-                if len(all_ancestors) == 0:
-                    all_ancestors = ["NONE"]
-                go_genes = "|".join(go_genes)
-                all_ancestors = "|".join(all_ancestors)
-                info = [r.GO, r.goterm.name, round(r.p_uncorrected, 5), round(r.p_fdr_bh, 5), r.ratio_in_study[0], r.ratio_in_study[1], go_genes, all_ancestors]
-                info = ",".join([str(s) for s in info])
-                outhandle.write(info + "\n")
+            header = grouped_results_highlights[0].keys()
+            writer = DictWriter(outhandle, fieldnames=header)
+            writer.writeheader()
+            writer.writerows(grouped_results_highlights)
     
     @staticmethod
     def extract_background_genes(background_genes_path: Path) -> set[str]:
@@ -137,8 +166,8 @@ class GoatoolsManager:
             for line in reader_iterator:
                 gene = line[0]
                 group = int(line[1])
-                # if group != 12:
-                #     continue
+                if group != 12:
+                    continue
                 study_genes.add(gene)
         return study_genes
     
@@ -151,6 +180,23 @@ class GoatoolsManager:
             except KeyError:
                 continue
         return converted_study_genes
+
+    @classmethod
+    def calculate_group_go_term(cls, go_term: str, godag: GODag, goslim_dag: GODag) -> str:
+        direct_ancestors, all_ancestors = mapslim(go_term, godag, goslim_dag)
+        if direct_ancestors != all_ancestors:
+            pass
+            # print(f"{go_term} has different direct vs all ancestors")
+        if len(all_ancestors) == 0:
+            return "NONE"
+        return cls.get_lowest_level_ancestor(godag, all_ancestors)
+
+    @staticmethod
+    def get_lowest_level_ancestor(godag: GODag, ancestors: set[str]) -> str:
+        ancestor_levels = dict()
+        for ancestor in ancestors:
+            ancestor_levels[ancestor] = godag[ancestor].level
+        return max(ancestor_levels, key= lambda x: ancestor_levels[x])
 
 if __name__ == "__main__":
     taxon_id = 9407
