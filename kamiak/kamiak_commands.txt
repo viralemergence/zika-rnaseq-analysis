@@ -173,7 +173,7 @@ singularity exec --pwd /src \
     --bind $HOST_DATA_GO_DIR:/src/data/go_analysis \
     $SINGULARITY_IMAGE \
     python3 -u /src/app/goatools_chiroptera.py \
-    -t 9407 \
+    -t 9407 -g 12 \
     -b "/src/data/go_analysis/ncbi_gene_results.txt" \
     -s "/src/data/pydeseq2/degpatterns/gene_clusters.csv"
 

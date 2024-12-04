@@ -9,8 +9,9 @@ from goatools.obo_parser import GODag # type: ignore
 from pathlib import Path
 
 class GoatoolsManager:
-    def __init__(self, taxon_id: int, background_genes_path: str, study_genes_path: str) -> None:
+    def __init__(self, taxon_id: int, background_genes_path: str, study_genes_path: str, group: int) -> None:
         self.taxon_id = taxon_id
+        self.group = group
 
         # Background and study genes for enrichment analysis
         self.background_genes_path = Path(background_genes_path)
@@ -28,7 +29,7 @@ class GoatoolsManager:
         self.gene2go_taxon_path = Path(f"/src/data/go_analysis/gene2go_{self.taxon_id}.txt")
 
         # Final results path
-        self.outpath = Path("/src/data/go_analysis/") / f"{self.study_genes_path.stem}_goatools_results.csv"
+        self.outpath = Path("/src/data/go_analysis/") / f"{self.study_genes_path.stem}_group_{self.group}_goea.csv"
 
     def setup(self) -> None:
         if not self.gene2go_taxon_path.is_file():
@@ -64,7 +65,7 @@ class GoatoolsManager:
         # Returns list of goatools result objects
         background_genes = self.extract_background_genes(self.background_genes_path)
         symbol_id_mapper = self.set_symbol_id_mapper(self.background_genes_path)
-        study_genes_symbol = self.extract_study_genes(self.study_genes_path)
+        study_genes_symbol = self.extract_study_genes(self.study_genes_path, self.group)
         study_genes = self.convert_study_gene_symbols(study_genes_symbol, symbol_id_mapper)
 
         godag = GODag(str(self.obo_path), optional_attrs=["relationship"])
@@ -100,17 +101,20 @@ class GoatoolsManager:
         return symbol_id_mapper
     
     @staticmethod
-    def extract_study_genes(study_genes_path: Path) -> set[str]:
+    def extract_study_genes(study_genes_path: Path, group: int) -> set[str]:
         study_genes = set()
         with study_genes_path.open() as inhandle:
             reader_iterator = reader(inhandle, delimiter=",")
             header = next(reader_iterator)
-            for line in reader_iterator:
-                gene = line[0]
-                group = int(line[1])
-                if group != 12:
-                    continue
-                study_genes.add(gene)
+            if group == 0:
+                for line in reader_iterator:
+                    study_genes.add(line[0])
+            else:
+                for line in reader_iterator:
+                    cluster = int(line[1])
+                    if cluster != group:
+                        continue
+                    study_genes.add(line[0])
         return study_genes
     
     @staticmethod
@@ -132,8 +136,8 @@ class GoatoolsManager:
         return gene_go_terms
 
 class GoatoolsResultsManager(GoatoolsManager):
-    def __init__(self, taxon_id: int, background_genes_path: str, study_genes_path: str) -> None:
-        super().__init__(taxon_id, background_genes_path, study_genes_path)
+    def __init__(self, taxon_id: int, background_genes_path: str, study_genes_path: str, group: int) -> None:
+        super().__init__(taxon_id, background_genes_path, study_genes_path, group)
 
     def run(self, goatools_results: list) -> None:
         symbol_id_mapper = self.set_symbol_id_mapper(self.background_genes_path)
@@ -176,9 +180,6 @@ class GoatoolsResultsManager(GoatoolsManager):
     @classmethod
     def calculate_group_go_term(cls, go_term: str, godag: GODag, goslim_dag: GODag) -> str:
         direct_ancestors, all_ancestors = mapslim(go_term, godag, goslim_dag)
-        if direct_ancestors != all_ancestors:
-            pass
-            # print(f"{go_term} has different direct vs all ancestors")
         if len(all_ancestors) == 0:
             return "NONE"
         return cls.get_lowest_level_ancestor(godag, all_ancestors)
@@ -221,15 +222,18 @@ if __name__ == "__main__":
     parser.add_argument("-t", "--taxon_id", type=int, required=True)
     parser.add_argument("-b", "--background_genes", type=str, required=True)
     parser.add_argument("-s", "--study_genes", type=str, required=True)
+    parser.add_argument("-g", "--group", type=int, required=True,
+                        help="0 includes all groups, whereas any other number will extract only genes associated with that group")
     args = parser.parse_args()
 
     taxon_id = args.taxon_id
     background_genes_path = args.background_genes
     study_genes_path = args.study_genes
+    group = args.group
 
-    gm = GoatoolsManager(taxon_id, background_genes_path, study_genes_path)
+    gm = GoatoolsManager(taxon_id, background_genes_path, study_genes_path, group)
     gm.setup()
     results = gm.run()
     
-    grm = GoatoolsResultsManager(taxon_id, background_genes_path, study_genes_path)
+    grm = GoatoolsResultsManager(taxon_id, background_genes_path, study_genes_path, group)
     grm.run(results)
