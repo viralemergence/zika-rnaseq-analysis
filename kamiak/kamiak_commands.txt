@@ -174,8 +174,8 @@ singularity exec --pwd /src \
     $SINGULARITY_IMAGE \
     python3 -u /src/app/goatools_chiroptera.py \
     -t 9407 -g 12 \
-    -b "/src/data/go_analysis/ncbi_gene_results.txt" \
-    -s "/src/data/pydeseq2/degpatterns/gene_clusters.csv"
+    -b "/src/data/go_analysis/ncbi_gene_results_9407.txt" \
+    -s "/src/data/pydeseq2/degpatterns/R06E_MR_gene_clusters.csv"
 
 # To test gomcl with public test data
 wget https://github.com/Guannan-Wang/GOMCL/raw/refs/heads/master/tests/Wendrich_PNAS_SD2_LR_TMO5_H_vs_L.bgo \

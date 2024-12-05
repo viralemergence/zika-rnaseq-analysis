@@ -1,16 +1,25 @@
 from argparse import ArgumentParser
+from contextlib import contextmanager, redirect_stdout, redirect_stderr
 from csv import reader
 import matplotlib.pyplot as plt # type: ignore
-import os
+from os import devnull, environ
 import pandas as pd # type: ignore
 from pathlib import Path
 import pickle
 from pydeseq2.dds import DeseqDataSet # type: ignore
 
-os.environ["NUMBA_CACHE_DIR"] = "/tmp/" # Needed for scanpy to import properly
+environ["NUMBA_CACHE_DIR"] = "/tmp/" # Needed for scanpy to import properly
 import scanpy as sc # type: ignore
 import scipy.cluster.hierarchy as sch # type: ignore
 import subprocess
+from typing import Union
+from warnings import catch_warnings, simplefilter
+
+@contextmanager
+def suppress_stdout_stderr():
+    with open(devnull, "w") as null_handle:
+        with redirect_stdout(null_handle) as out, redirect_stderr(null_handle) as err:
+            yield(out, err)
 
 class SampleMetaDataManager:
     def __init__(self, metadata_path: Path) -> None:
@@ -130,32 +139,37 @@ class DifferentialExpressionAnalysis:
 
     def run(self, gene_counts: pd.DataFrame, sample_metadata: pd.DataFrame) -> None:
         design_factors = ["Time", "Virus"] # Doesn't like Virus AND Treatment (redundancy probably)
-        viruses = ["MR", "PRV"]
-        pca_color_factors = ["Lib. Prep Batch", "Time", "Virus"]
+        viruses = ["MR", "PRV"] # TODO: Probably better to extract from metadata file
+        pca_color_factors = ["Lib. Prep Batch", "Time", "Virus"] # TODO: Probably better to extract, maybe from a yaml
 
         gene_counts, sample_metadata = self.remove_discrepant_sample_ids(gene_counts, sample_metadata)
         cell_lines = self.extract_cell_lines(sample_metadata)
-        print(cell_lines)
+        print(f"Metadata listed cell lines: {cell_lines}")
 
         for cell_line in cell_lines:
-            if cell_line != "R06E":
+            if cell_line == "HypNi": # NOTE: Will want to remove for future projects
+                print(f"\nSkipping cell line: {cell_line}")
                 continue
-            print(f"Starting on cell line: {cell_line}")
+            print(f"\nStarting on cell line: {cell_line}\n----------")
             gene_counts_by_cell_line, sample_metadata_by_cell_line = self.filter_for_cell_line(gene_counts, sample_metadata, cell_line)
             gene_counts_by_cell_line, sample_metadata_by_cell_line = self.pickle_and_rectify_batch_effect(gene_counts_by_cell_line, sample_metadata_by_cell_line, cell_line)
             
             for virus in viruses:
+                print(f"\nStarting on virus: {virus}")
                 gene_counts_by_virus, sample_metadata_by_virus = self.filter_for_virus(gene_counts_by_cell_line, sample_metadata_by_cell_line, virus)
                 lrt_results = self.perform_likelihood_ratio_test(gene_counts_by_virus, sample_metadata_by_virus, self.lrt_dir)
 
-                dds = DeseqDataSet(counts=gene_counts_by_virus,
-                                metadata=sample_metadata_by_virus,
-                                design_factors=design_factors)
-                dds.deseq2()
+                print("Starting pyDEseq2 analysis") # TODO: Could put all this in a "differential expression" function for easier reading
+                with catch_warnings():
+                    simplefilter("ignore")
+                    dds = DeseqDataSet(counts=gene_counts_by_virus,
+                                    metadata=sample_metadata_by_virus,
+                                    design_factors=design_factors)
+                with suppress_stdout_stderr(): # NOTE: Primarily suppresses redundant messages in prod, but could suppress actual errors important for dev work
+                    dds.deseq2()
                 
-                gene_clusters = self.perform_degpatterns_clustering(lrt_results, dds, sample_metadata_by_virus, self.degpatterns_dir)
-                print(gene_clusters)
-                return
+                gene_clusters = self.perform_degpatterns_clustering(lrt_results, dds, sample_metadata_by_virus, self.degpatterns_dir, cell_line, virus)
+                continue
 
                 self.lrt_sanity_check_graphs(lrt_results, dds)
                 return
@@ -286,9 +300,9 @@ class DifferentialExpressionAnalysis:
         while p.poll() is None and (line := p.stdout.readline()) != "":
             pass
         p.wait()
-        print(f"Exit code: {p.poll()}")
 
         if p.poll() != 0:
+            print(f"Exit code: {p.poll()}")
             for line in p.stderr.readlines():
                 print(line.strip())
             raise Exception("R DESeq2 LRT did not complete successfully")
@@ -334,15 +348,19 @@ class DifferentialExpressionAnalysis:
         return significant_lrt_results.index.tolist()
 
     @classmethod
-    def perform_degpatterns_clustering(cls, lrt_results: pd.DataFrame, dds: DeseqDataSet, sample_metadata: pd.DataFrame, write_directory: Path) -> dict[int]:
+    def perform_degpatterns_clustering(cls, lrt_results: pd.DataFrame, dds: DeseqDataSet, sample_metadata: pd.DataFrame, write_directory: Path, cell_line: str, virus: str) -> Union[dict[int], None]:
         gene_ids_of_interest = cls.extract_lrt_gene_ids_of_interest(lrt_results, 0.05, "smaller")
+        if len(gene_ids_of_interest) == 0:
+            print("No LRT significant padj: skipping degpatterns clustering")
+            return None
         normalized_counts = cls.extract_normalized_count_df_from_dds(dds)
         normalized_counts, sample_metadata = cls.remove_zero_time_point(normalized_counts, sample_metadata) # NOTE: May not want this step
         normalized_counts_of_interest = normalized_counts[gene_ids_of_interest].copy()
 
         gene_count_path, sample_metadata_path = cls.write_input_data_for_degpattern_clustering(normalized_counts_of_interest, sample_metadata, write_directory)
-        degpattern_results_path = write_directory / "gene_clusters.csv"
-        cls.run_r_degpatterns_command(gene_count_path, sample_metadata_path, degpattern_results_path)
+        degpattern_results_path = write_directory / f"{cell_line}_{virus}_gene_clusters.csv"
+        degpattern_figure_path = write_directory / f"{cell_line}_{virus}_gene_clusters.pdf"
+        cls.run_r_degpatterns_command(gene_count_path, sample_metadata_path, degpattern_results_path, degpattern_figure_path)
         return dict(pd.read_csv(degpattern_results_path).values)
 
     @staticmethod
@@ -354,18 +372,18 @@ class DifferentialExpressionAnalysis:
         return gene_count_outpath, sample_metadata_outpath
 
     @staticmethod
-    def run_r_degpatterns_command(gene_count_path: str, sample_metadata_path: str, degpattern_results_path: Path) -> None:
+    def run_r_degpatterns_command(gene_count_path: str, sample_metadata_path: str, degpattern_results_path: Path, degpattern_figure_path: Path) -> None:
         print("Starting degPatterns in R")
         r_degpatterns_command = ["Rscript", "/src/app/degpattern_clustering.R",
-                         gene_count_path, sample_metadata_path, degpattern_results_path]
+                         gene_count_path, sample_metadata_path, degpattern_results_path, degpattern_figure_path]
 
         p = subprocess.Popen(r_degpatterns_command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
         while p.poll() is None and (line := p.stdout.readline()) != "":
             pass
         p.wait()
-        print(f"Exit code: {p.poll()}")
 
         if p.poll() != 0:
+            print(f"Exit code: {p.poll()}")
             for line in p.stderr.readlines():
                 print(line.strip())
             raise Exception("R degPatterns did not complete successfully")
