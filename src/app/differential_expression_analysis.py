@@ -356,6 +356,8 @@ class DifferentialExpressionAnalysis:
         normalized_counts = cls.extract_normalized_count_df_from_dds(dds)
         normalized_counts, sample_metadata = cls.remove_zero_time_point(normalized_counts, sample_metadata) # NOTE: May not want this step
         normalized_counts_of_interest = normalized_counts[gene_ids_of_interest].copy()
+        # NOTE: A stupid way to get the No_Virus category at the end of a sort so the labels are consistently colored by degpatterns:
+        sample_metadata["Virus"] = sample_metadata["Virus"].apply(lambda x: "~No_Virus" if x == "No_Virus" else x)
 
         gene_count_path, sample_metadata_path = cls.write_input_data_for_degpattern_clustering(normalized_counts_of_interest, sample_metadata, write_directory)
         degpattern_results_path = write_directory / f"{cell_line}_{virus}_gene_clusters.csv"
@@ -378,7 +380,7 @@ class DifferentialExpressionAnalysis:
                          gene_count_path, sample_metadata_path, degpattern_results_path, degpattern_figure_path]
 
         p = subprocess.Popen(r_degpatterns_command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-        while p.poll() is None and (line := p.stdout.readline()) != "":
+        while p.poll() is None and (line := p.stdout.readline().strip()) != "":
             pass
         p.wait()
 
