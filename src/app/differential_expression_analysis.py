@@ -4,7 +4,6 @@ import matplotlib.pyplot as plt # type: ignore
 from os import devnull, environ
 import pandas as pd # type: ignore
 from pathlib import Path
-import pickle
 from pydeseq2.dds import DeseqDataSet # type: ignore
 
 environ["NUMBA_CACHE_DIR"] = "/tmp/" # Needed for scanpy to import properly
@@ -33,7 +32,6 @@ class DifferentialExpressionAnalysis:
         viruses = ["MR", "PRV"] # TODO: Probably better to extract from metadata file
         pca_color_factors = ["Lib. Prep Batch", "Time", "Virus"] # TODO: Probably better to extract, maybe from a yaml
 
-        gene_counts, sample_metadata = self.remove_discrepant_sample_ids(gene_counts, sample_metadata)
         cell_lines = self.extract_cell_lines(sample_metadata)
         print(f"Metadata listed cell lines: {cell_lines}")
 
@@ -43,7 +41,6 @@ class DifferentialExpressionAnalysis:
                 continue
             print(f"\nStarting on cell line: {cell_line}\n----------")
             gene_counts_by_cell_line, sample_metadata_by_cell_line = self.filter_for_cell_line(gene_counts, sample_metadata, cell_line)
-            gene_counts_by_cell_line, sample_metadata_by_cell_line = self.pickle_and_rectify_batch_effect(gene_counts_by_cell_line, sample_metadata_by_cell_line, cell_line)
             
             for virus in viruses:
                 print(f"\nStarting on virus: {virus}")
@@ -91,43 +88,6 @@ class DifferentialExpressionAnalysis:
         sample_metadata = sample_metadata[sample_metadata["Cell Line"] == cell_line]
         gene_counts = gene_counts[gene_counts.index.isin(sample_metadata.index)]
         return gene_counts, sample_metadata
-    
-    @classmethod
-    def pickle_and_rectify_batch_effect(cls, gene_counts: pd.DataFrame, sample_metadata: pd.DataFrame, cell_line: str) -> tuple[pd.DataFrame, pd.DataFrame]:
-        gene_counts_pickled_path = Path(f"/src/data/pydeseq2/pickles/{cell_line}_gene_counts.pkl")
-        sample_metadata_pickled_path = Path(f"/src/data/pydeseq2/pickles/{cell_line}_sample_metadata.pkl")
-        if gene_counts_pickled_path.is_file():
-            print(f"{cell_line} pickle detected. Loading now")
-            with gene_counts_pickled_path.open("rb") as inhandle:
-                gene_counts = pickle.load(inhandle)
-            with sample_metadata_pickled_path.open("rb") as inhandle:
-                sample_metadata = pickle.load(inhandle)
-        else:
-            gene_counts, sample_metadata = cls.rectify_batch_effect(gene_counts, sample_metadata)
-            with gene_counts_pickled_path.open("wb") as outhandle:
-                pickle.dump(gene_counts, outhandle)
-            with sample_metadata_pickled_path.open("wb") as outhandle:
-                pickle.dump(sample_metadata, outhandle)
-        return gene_counts, sample_metadata
-    
-    @classmethod
-    def rectify_batch_effect(cls, gene_counts: pd.DataFrame, sample_metadata: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
-        from inmoose.pycombat import pycombat_seq # type: ignore # Need to import inside function to prevent module overlap issues
-        print("Starting batch effect correction (this may take awhile)")
-        batches = sample_metadata["Lib. Prep Batch"].to_list()
-        covariates = sample_metadata[["Time", "Virus"]]
-        gene_counts = pycombat_seq(gene_counts.T, batches, covar_mod=covariates).T.astype("int")
-        return cls.correct_negative_numbers(gene_counts), sample_metadata
-    
-    @staticmethod
-    def correct_negative_numbers(gene_counts: pd.DataFrame) -> pd.DataFrame:
-        negative_count = (gene_counts < 0).sum().sum()
-        if negative_count > 0:
-            print(f"\nWARNING: {negative_count} negative values detected after batch effect correction")
-            gene_counts[gene_counts < 0] = 0
-            print("Negative values have been set to 0\n")
-            return gene_counts
-        return gene_counts
     
     @staticmethod
     def filter_for_virus(gene_counts: pd.DataFrame, sample_metadata: pd.DataFrame, virus: str) -> tuple[pd.DataFrame, pd.DataFrame]:

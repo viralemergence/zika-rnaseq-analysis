@@ -11,6 +11,7 @@ HOST_APP_DIR="/home/alexander.brown/zika-rnaseq-analysis/src/app"
 HOST_DATA_DIR="/home/alexander.brown/zika-rnaseq-analysis/src/data"
 HOST_DATA_STAR_DIR="/home/alexander.brown/zika-rnaseq-analysis/src/data/star"
 HOST_DATA_GENE_COUNT_PROCESSING_DIR="/home/alexander.brown/zika-rnaseq-analysis/src/data/gene_count_processing"
+HOST_DATA_BATCH_EFFECT_DIR="/home/alexander.brown/zika-rnaseq-analysis/src/data/batch_effect_rectified"
 HOST_DATA_DESEQ_DIR="/home/alexander.brown/zika-rnaseq-analysis/src/data/pydeseq2"
 HOST_DATA_GO_DIR="/home/alexander.brown/zika-rnaseq-analysis/src/data/go_analysis"
 HOST_GENOME_DIR="/home/alexander.brown/zika-rnaseq-analysis/src/genomes"
@@ -133,16 +134,28 @@ singularity exec --pwd /src \
     -m /src/data/gene_count_processing/sample_metadata.csv \
     -k /src/data/gene_count_processing/samples_to_combine.csv
 
+# To run correct batch effect with pycombat
+singularity exec --pwd /src \
+    --no-home \
+    --bind $HOST_APP_DIR:/src/app \
+    --bind $HOST_DATA_GENE_COUNT_PROCESSING_DIR:/src/data/gene_count_processing \
+    --bind $HOST_DATA_BATCH_EFFECT_DIR:/src/data/batch_effect_rectified \
+    $SINGULARITY_IMAGE \
+    python3 -u /src/app/batch_effect_rectification.py \
+    -c /src/data/gene_count_processing/processed_gene_counts.csv \
+    -m /src/data/gene_count_processing/processed_sample_metadata.csv \
+    -o /src/data/batch_effect_rectified
+
 # To run PyDeseq2
 singularity exec --pwd /src \
     --no-home \
     --bind $HOST_APP_DIR:/src/app \
     --bind $HOST_DATA_DESEQ_DIR:/src/data/pydeseq2 \
-    --bind $HOST_DATA_GENE_COUNT_PROCESSING_DIR:/src/data/gene_count_processing \
+    --bind $HOST_DATA_BATCH_EFFECT_DIR:/src/data/batch_effect_rectified \
     $SINGULARITY_IMAGE \
     python3 -u /src/app/differential_expression_analysis.py \
-    -c /src/data/gene_count_processing/processed_gene_counts.csv \
-    -m /src/data/gene_count_processing/processed_sample_metadata.csv
+    -c /src/data/batch_effect_rectified/gene_counts_final.csv \
+    -m /src/data/batch_effect_rectified/sample_metadata_final.csv
 
 # To test R Deseq2 LRT function
 singularity exec --pwd /src \
