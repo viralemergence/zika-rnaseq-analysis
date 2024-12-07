@@ -10,6 +10,7 @@ MAKEFILE="/src/container_commands/Makefile"
 HOST_APP_DIR="/home/alexander.brown/zika-rnaseq-analysis/src/app"
 HOST_DATA_DIR="/home/alexander.brown/zika-rnaseq-analysis/src/data"
 HOST_DATA_STAR_DIR="/home/alexander.brown/zika-rnaseq-analysis/src/data/star"
+HOST_DATA_GENE_COUNT_PROCESSING_DIR="/home/alexander.brown/zika-rnaseq-analysis/src/data/gene_count_processing"
 HOST_DATA_DESEQ_DIR="/home/alexander.brown/zika-rnaseq-analysis/src/data/pydeseq2"
 HOST_DATA_GO_DIR="/home/alexander.brown/zika-rnaseq-analysis/src/data/go_analysis"
 HOST_GENOME_DIR="/home/alexander.brown/zika-rnaseq-analysis/src/genomes"
@@ -119,27 +120,29 @@ singularity exec --pwd /src \
     -i /src/data/processed_fastq -f /src/data/star/sample_file_names_new_world.txt \
     -g /src/genomes/artibeus_star_index -o /src/data/star_results -j 0
 
-# To collate STAR gene counts
+# To collate STAR gene counts, preprocess sample metadata, and preprocess gene counts
 singularity exec --pwd /src \
     --no-home \
     --bind $HOST_APP_DIR:/src/app \
     --bind $HOST_DATA_STAR_DIR:/src/data/star \
+    --bind $HOST_DATA_GENE_COUNT_PROCESSING_DIR:/src/data/gene_count_processing \
     $SINGULARITY_IMAGE \
-    python3 -u /src/app/gene_count_collation.py \
+    python3 -u /src/app/gene_count_and_metadata_processing.py \
     -i /src/data/star/gene_counts \
-    -o /src/data/star/collated_gene_counts.csv
+    -c /src/data/gene_count_processing/collated_gene_counts.csv \
+    -m /src/data/gene_count_processing/sample_metadata.csv \
+    -k /src/data/gene_count_processing/samples_to_combine.csv
 
 # To run PyDeseq2
 singularity exec --pwd /src \
     --no-home \
     --bind $HOST_APP_DIR:/src/app \
     --bind $HOST_DATA_DESEQ_DIR:/src/data/pydeseq2 \
-    --bind $HOST_DATA_STAR_DIR:/src/data/star \
+    --bind $HOST_DATA_GENE_COUNT_PROCESSING_DIR:/src/data/gene_count_processing \
     $SINGULARITY_IMAGE \
     python3 -u /src/app/differential_expression_analysis.py \
-    -c /src/data/star/collated_gene_counts.csv \
-    -m /src/data/pydeseq2/sample_metadata.csv \
-    -k /src/data/pydeseq2/samples_to_combine.csv
+    -c /src/data/gene_count_processing/processed_gene_counts.csv \
+    -m /src/data/gene_count_processing/processed_sample_metadata.csv
 
 # To test R Deseq2 LRT function
 singularity exec --pwd /src \

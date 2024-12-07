@@ -1,6 +1,5 @@
 from argparse import ArgumentParser
 from contextlib import contextmanager, redirect_stdout, redirect_stderr
-from csv import reader
 import matplotlib.pyplot as plt # type: ignore
 from os import devnull, environ
 import pandas as pd # type: ignore
@@ -20,114 +19,6 @@ def suppress_stdout_stderr():
     with open(devnull, "w") as null_handle:
         with redirect_stdout(null_handle) as out, redirect_stderr(null_handle) as err:
             yield(out, err)
-
-class SampleMetaDataManager:
-    def __init__(self, metadata_path: Path) -> None:
-        self.metadata_path = metadata_path
-        
-    def run(self) -> None:
-        sample_metadata = self.extract_sample_metadata(self.metadata_path)
-        sample_metadata = self.remove_rows_without_id(sample_metadata)
-        sample_metadata = self.set_gene_count_id(sample_metadata)
-        sample_metadata = self.set_sample_id_as_index(sample_metadata)
-        sample_metadata = self.sort_by_index(sample_metadata)
-        self.sample_metadata = sample_metadata
-        
-        self.count_id_conversion = self.set_count_id_to_sample_id_dict(self.sample_metadata)
-
-    @staticmethod
-    def extract_sample_metadata(metadata_path: Path) -> pd.DataFrame:
-        return pd.read_csv(metadata_path)
-
-    @staticmethod
-    def remove_rows_without_id(sample_metadata: pd.DataFrame) -> pd.DataFrame:
-        return sample_metadata.dropna(subset=["Sample ID"])
-    
-    @classmethod
-    def set_gene_count_id(cls, sample_metadata: pd.DataFrame) -> pd.DataFrame:
-        sample_metadata["gene_count_id"] = sample_metadata.apply(cls.convert_raw_id_to_count_id, axis=1)
-        return sample_metadata
-    
-    @staticmethod
-    def convert_raw_id_to_count_id(row: pd.DataFrame) -> str:
-        raw_file_name = row["Raw_file_R1"]
-        old_suffix = "_L001_R1_001.fastq.gz"
-        count_id = raw_file_name.replace(old_suffix, "")
-        return count_id
-    
-    @staticmethod
-    def set_sample_id_as_index(sample_metadata: pd.DataFrame) -> pd.DataFrame:
-        return sample_metadata.set_index("Sample ID")
-    
-    @staticmethod
-    def sort_by_index(sample_metadata: pd.DataFrame) -> pd.DataFrame:
-        return sample_metadata.sort_index()
-    
-    @staticmethod
-    def set_count_id_to_sample_id_dict(sample_metadata: pd.DataFrame) -> dict[str]:
-        gene_count_ids = sample_metadata["gene_count_id"].tolist()
-        sample_ids = sample_metadata.index.tolist()
-        return {count_id: sample_id for count_id, sample_id in zip(gene_count_ids, sample_ids)}
-
-class GeneCountManager:
-    def __init__(self, gene_counts_path: Path) -> None:
-        self.gene_counts_path = gene_counts_path
-
-    def run(self, count_id_conversion: dict[str], samples_to_combine_path: Path = False) -> None:
-        gene_counts = self.extract_gene_counts(self.gene_counts_path)
-        gene_counts = self.remove_blacklist_samples(gene_counts)
-        if samples_to_combine_path:
-            gene_counts = self.combine_samples(gene_counts, samples_to_combine_path)
-        gene_counts = self.rename_gene_count_ids(gene_counts, count_id_conversion)
-        gene_counts = self.set_gene_id_as_index(gene_counts)
-        gene_counts = self.remove_low_count_rows(gene_counts)
-        gene_counts = self.transpose_gene_counts(gene_counts)
-        self.gene_counts = self.sort_by_index(gene_counts)
-
-    @staticmethod
-    def extract_gene_counts(gene_counts_path: Path) -> pd.DataFrame:
-        return pd.read_csv(gene_counts_path)
-    
-    @staticmethod
-    def remove_blacklist_samples(gene_counts: pd.DataFrame) -> pd.DataFrame:
-        blacklist_samples = ["HypNi_ZIKV_PRVABC59_24_a_S35"]
-        return gene_counts.drop(blacklist_samples, axis=1)
-
-    @classmethod
-    def combine_samples(cls, gene_counts: pd.DataFrame, samples_to_combine_path: Path) -> pd.DataFrame:
-        samples_to_combine = cls.extract_samples_to_combine(samples_to_combine_path)
-        for sample_1, sample_2 in samples_to_combine:
-            gene_counts[sample_1] = gene_counts[sample_1] + gene_counts[sample_2]
-            gene_counts = gene_counts.drop([sample_2], axis=1)
-        return gene_counts
-
-    @staticmethod
-    def extract_samples_to_combine(samples_to_combine_path: Path) -> list[list]:
-        with samples_to_combine_path.open() as inhandle:
-            reader_iterator = reader(inhandle, delimiter=",")
-            samples_to_combine = [line for line in reader_iterator]
-        return samples_to_combine
-
-    @staticmethod
-    def rename_gene_count_ids(gene_counts: pd.DataFrame, id_conversion_dict: dict[str]) -> pd.DataFrame:
-        return gene_counts.rename(columns=id_conversion_dict)
-
-    @staticmethod
-    def set_gene_id_as_index(gene_counts: pd.DataFrame) -> pd.DataFrame:
-        gene_counts = gene_counts.rename(columns={"sample_name": "gene_id"})
-        return gene_counts.set_index("gene_id")
-
-    @staticmethod
-    def remove_low_count_rows(gene_counts: pd.DataFrame, threshold: int = 10) -> pd.DataFrame:
-        return gene_counts[gene_counts.sum(axis = 1) > threshold]
-    
-    @staticmethod
-    def transpose_gene_counts(gene_counts: pd.DataFrame) -> pd.DataFrame:
-        return gene_counts.T
-
-    @staticmethod
-    def sort_by_index(gene_counts: pd.DataFrame) -> pd.DataFrame:
-        return gene_counts.sort_index()
 
 class DifferentialExpressionAnalysis:
     def __init__(self):
@@ -394,17 +285,10 @@ if __name__ == "__main__":
     parser = ArgumentParser()
     parser.add_argument("-c", "--counts", type=str, required=True)
     parser.add_argument("-m", "--metadata", type=str, required=True)
-    parser.add_argument("-k", "--combine", type=str, required=False)
     args = parser.parse_args()
 
-    smdm = SampleMetaDataManager(Path(args.metadata))
-    smdm.run()
-
-    gcm = GeneCountManager(Path(args.counts))
-    gcm_parameters = {"count_id_conversion": smdm.count_id_conversion}
-    if args.combine:
-        gcm_parameters.update({"samples_to_combine_path": Path(args.combine)})
-    gcm.run(**gcm_parameters)
+    gene_counts = pd.read_csv(args.counts, index_col=0)
+    sample_metadata = pd.read_csv(args.metadata, index_col=0)
     
     dea = DifferentialExpressionAnalysis()
-    dea.run(gcm.gene_counts, smdm.sample_metadata)
+    dea.run(gene_counts, sample_metadata)
