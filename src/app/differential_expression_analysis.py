@@ -45,7 +45,7 @@ class DifferentialExpressionAnalysis:
             for virus in viruses:
                 print(f"\nStarting on virus: {virus}")
                 gene_counts_by_virus, sample_metadata_by_virus = self.filter_for_virus(gene_counts_by_cell_line, sample_metadata_by_cell_line, virus)
-                lrt_results = self.perform_likelihood_ratio_test(gene_counts_by_virus, sample_metadata_by_virus, self.lrt_dir)
+                lrt_results = self.perform_likelihood_ratio_test(gene_counts_by_virus, sample_metadata_by_virus, self.lrt_dir, cell_line, virus)
 
                 print("Starting pyDEseq2 analysis") # TODO: Could put all this in a "differential expression" function for easier reading
                 with catch_warnings():
@@ -120,10 +120,10 @@ class DifferentialExpressionAnalysis:
         plt.savefig(f"{figure_dir}dendrogram_{cell_line}_{virus}.png", bbox_inches="tight")
         
     @classmethod
-    def perform_likelihood_ratio_test(cls, gene_counts: pd.DataFrame, sample_metadata: pd.DataFrame, write_directory: Path) -> pd.DataFrame:
+    def perform_likelihood_ratio_test(cls, gene_counts: pd.DataFrame, sample_metadata: pd.DataFrame, write_directory: Path, cell_line: str, virus: str) -> pd.DataFrame:
         gene_counts, sample_metadata = cls.remove_zero_time_point(gene_counts, sample_metadata)
         gene_count_path, sample_metadata_path = cls.write_input_data_for_log_ratio_test(gene_counts, sample_metadata, write_directory)
-        r_lrt_results_path = write_directory / "LRT_results.csv"
+        r_lrt_results_path = write_directory / f"{cell_line}_{virus}_LRT_results.csv"
 
         cls.run_r_lrt_command(gene_count_path, sample_metadata_path, r_lrt_results_path)
         return pd.read_csv(r_lrt_results_path, index_col=0)
