@@ -193,33 +193,6 @@ singularity exec --pwd /src \
     -b "/src/data/go_analysis/ncbi_gene_results_9407.txt" \
     -s "/src/data/pydeseq2/degpatterns/R06E_MR_gene_clusters.csv"
 
-# To test gomcl with public test data
-wget https://github.com/Guannan-Wang/GOMCL/raw/refs/heads/master/tests/Wendrich_PNAS_SD2_LR_TMO5_H_vs_L.bgo \
-    -O $HOST_DATA_GO_DIR/Wendrich_PNAS_SD2_LR_TMO5_H_vs_L.bgo
-
-singularity exec --pwd /src \
-    --no-home \
-    --bind $HOST_DATA_GO_DIR:/src/data/go_analysis \
-    $SINGULARITY_IMAGE \
-    GOMCL.py \
-    /src/data/go_analysis/go-basic.obo \
-    /src/data/go_analysis/Wendrich_PNAS_SD2_LR_TMO5_H_vs_L.bgo \
-    -gotype BP CC MF
-
-# To test gomcl
-singularity exec --pwd /src \
-    --no-home \
-    --bind $HOST_DATA_GO_DIR:/src/data/go_analysis \
-    $SINGULARITY_IMAGE \
-    GOMCL.py \
-    /src/data/go_analysis/go-basic.obo \
-    /src/data/go_analysis/goatools_results.txt \
-    -gotype BP CC MF \
-    -gosize 3000 \
-    -got generic \
-    -hm -nw \
-    -SI OC -Ct .5 -I 2
-
 # To run PyDeseq2 for Genes of Interest
 singularity exec --pwd /src \
     --no-home \
