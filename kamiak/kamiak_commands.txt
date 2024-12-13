@@ -188,10 +188,11 @@ singularity exec --pwd /src \
     --bind $HOST_DATA_DESEQ_DIR:/src/data/pydeseq2 \
     --bind $HOST_DATA_GO_DIR:/src/data/go_analysis \
     $SINGULARITY_IMAGE \
-    python3 -u /src/app/goatools_chiroptera.py \
-    -t 9407 -g 12 \
+    python3 -u /src/app/goatools_analysis.py \
+    -t 9407 -g 0 \
     -b "/src/data/go_analysis/ncbi_gene_results_9407.txt" \
-    -s "/src/data/pydeseq2/degpatterns/R06E_MR_gene_clusters.csv"
+    -s "/src/data/pydeseq2/degpatterns/R06E_MR_gene_clusters.csv" \
+    -o "/src/data/go_analysis"
 
 # To run PyDeseq2 for Genes of Interest
 singularity exec --pwd /src \

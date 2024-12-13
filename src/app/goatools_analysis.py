@@ -194,14 +194,14 @@ class GoatoolsResultsManager(GoatoolsManager):
             ancestor_levels[ancestor] = godag[ancestor].level
         return max(ancestor_levels, key= lambda x: ancestor_levels[x])
 
-    @staticmethod
-    def extract_highlights_from_grouped_go_terms(grouped_results: dict[list[dict]], godag: GODag) -> list[dict]:
+    @classmethod
+    def extract_highlights_from_grouped_go_terms(cls, grouped_results: dict[list[dict]], godag: GODag) -> list[dict]:
         grouped_results_highlights = list()
         for group_go_id, results in grouped_results.items():
             group_info = {"group_go_id": group_go_id,
                           "group_go_name": f'"{godag[group_go_id].name}"'}
 
-            most_significant_result = sorted(results, key=lambda result: result["p-val"])[0]
+            most_significant_result = cls.extract_most_significant_result(group_go_id, results)
             msr = most_significant_result
             most_significant_result_info = {"most_significant_go_id": msr["go_id"],
                                             "most_significant_go_name": msr["go_name"],
@@ -219,6 +219,13 @@ class GoatoolsResultsManager(GoatoolsManager):
             
             grouped_results_highlights.append(group_info)
         return sorted(grouped_results_highlights, key=lambda result: result["most_significant_p_val"])
+    
+    @staticmethod
+    def extract_most_significant_result(group_go_id: str, results: list[dict]) -> dict:
+        significant_results = sorted(results, key=lambda result: result["p-val"])
+        if (significant_results[0]["go_id"] != group_go_id) or (len(significant_results) == 1):
+            return significant_results[0]
+        return significant_results[1] #NOTE: May not want this, but does help remove very broad terms
 
 class GoatoolsResultsGrapher():
     def run(self, results_path: Path) -> None:
@@ -267,7 +274,7 @@ class GoatoolsResultsGrapher():
     def make_barchart(go_names: list[str], gene_counts: list[int], colors: list[list[float]]) -> Tuple[Any]:
         fig, ax = plt.subplots()
         ax.barh(go_names, gene_counts, color=colors)
-        ax.set_xlabel("Gene Count")
+        ax.set_xlabel("Genes per GO Term")
         if max(gene_counts) > 100:
             ax.set_xscale("log")
         return fig, ax
