@@ -1,15 +1,18 @@
 from argparse import ArgumentParser
 from collections import defaultdict
-from csv import reader, DictWriter
+from csv import reader, DictReader, DictWriter
 from goatools.anno.genetogo_reader import Gene2GoReader # type: ignore
 from goatools.base import dnld_file # type: ignore
 from goatools.go_enrichment import GOEnrichmentStudy # type: ignore
 from goatools.mapslim import mapslim # type: ignore
 from goatools.obo_parser import GODag # type: ignore
+import matplotlib.pyplot as plt# type: ignore
 from pathlib import Path
+from textwrap import wrap
+from typing import Any, Tuple
 
 class GoatoolsManager:
-    def __init__(self, taxon_id: int, background_genes_path: str, study_genes_path: str, group: int) -> None:
+    def __init__(self, taxon_id: int, background_genes_path: str, study_genes_path: str, group: int, outdir: Path) -> None:
         self.taxon_id = taxon_id
         self.group = group
 
@@ -29,7 +32,7 @@ class GoatoolsManager:
         self.gene2go_taxon_path = Path(f"/src/data/go_analysis/gene2go_{self.taxon_id}.txt")
 
         # Final results path
-        self.outpath = Path("/src/data/go_analysis/") / f"{self.study_genes_path.stem}_group_{self.group}_goea.csv"
+        self.outpath = outdir / f"{self.study_genes_path.stem}_group_{self.group}_goea.csv"
 
     def setup(self) -> None:
         if not self.gene2go_taxon_path.is_file():
@@ -136,8 +139,8 @@ class GoatoolsManager:
         return gene_go_terms
 
 class GoatoolsResultsManager(GoatoolsManager):
-    def __init__(self, taxon_id: int, background_genes_path: str, study_genes_path: str, group: int) -> None:
-        super().__init__(taxon_id, background_genes_path, study_genes_path, group)
+    def __init__(self, taxon_id: int, background_genes_path: str, study_genes_path: str, group: int, outdir: Path) -> None:
+        super().__init__(taxon_id, background_genes_path, study_genes_path, group, outdir)
 
     def run(self, goatools_results: list) -> None:
         symbol_id_mapper = self.set_symbol_id_mapper(self.background_genes_path)
@@ -217,11 +220,72 @@ class GoatoolsResultsManager(GoatoolsManager):
             grouped_results_highlights.append(group_info)
         return sorted(grouped_results_highlights, key=lambda result: result["most_significant_p_val"])
 
+class GoatoolsResultsGrapher():
+    def run(self, results_path: Path) -> None:
+        results = self.extract_results(results_path)
+        results_top_10 = results[:10][::-1] # NOTE: Need to reverse order so they plot correctly to bar chart
+
+        go_names = self.extract_transform_go_names(results_top_10)
+        gene_counts = self.extract_gene_counts(results_top_10)
+        p_vals = self.extract_pvals(results_top_10)
+        
+        cmap = plt.get_cmap("bwr_r")
+        colors = self.set_colors(cmap, p_vals)
+        
+        _, ax = self.make_barchart(go_names, gene_counts, colors)
+        self.add_colorbar(cmap, p_vals, ax)
+        
+        figure_outpath = results_path.with_suffix(".png")
+        plt.savefig(figure_outpath, bbox_inches="tight")
+        plt.close()
+
+    @staticmethod
+    def extract_results(results_path: Path) -> list[dict]:
+        with results_path.open() as inhandle:
+            reader_iterator = DictReader(inhandle)
+            return list(reader_iterator)
+
+    @staticmethod
+    def extract_transform_go_names(results: list[dict]) -> list[str]:
+        go_names = [r["most_significant_go_name"][1:-1] for r in results]
+        return ["\n".join(wrap(name, 40)) for name in go_names]
+
+    @staticmethod
+    def extract_pvals(results: list[dict]) -> list[float]:
+        return [float(r["most_significant_p_val"]) for r in results]
+    
+    @staticmethod
+    def extract_gene_counts(results: list[dict]) -> list[int]:
+        return [len(r["most_significant_study_genes"].split("|")) for r in results]
+    
+    @staticmethod
+    def set_colors(cmap, p_vals: list[float]) -> list[list[float]]:
+        rescale = [(p_val - min(p_vals)) / (max(p_vals) - min(p_vals)) for p_val in p_vals]
+        return cmap(rescale)
+
+    @staticmethod
+    def make_barchart(go_names: list[str], gene_counts: list[int], colors: list[list[float]]) -> Tuple[Any]:
+        fig, ax = plt.subplots()
+        ax.barh(go_names, gene_counts, color=colors)
+        ax.set_xlabel("Gene Count")
+        if max(gene_counts) > 100:
+            ax.set_xscale("log")
+        return fig, ax
+
+    @staticmethod
+    def add_colorbar(cmap, p_vals: list[float], ax) -> None:
+        sm = plt.cm.ScalarMappable(cmap=cmap)
+        sm.set_clim(vmin=min(p_vals), vmax=max(p_vals))
+        cbar = plt.colorbar(sm, ax=ax)
+        cbar.ax.invert_yaxis()
+        cbar.ax.set_title("p-val")
+
 if __name__ == "__main__":
     parser = ArgumentParser()
     parser.add_argument("-t", "--taxon_id", type=int, required=True)
     parser.add_argument("-b", "--background_genes", type=str, required=True)
     parser.add_argument("-s", "--study_genes", type=str, required=True)
+    parser.add_argument("-o", "--outdir", type=str, required=True)
     parser.add_argument("-g", "--group", type=int, required=True,
                         help="0 includes all groups, whereas any other number will extract only genes associated with that group")
     args = parser.parse_args()
@@ -230,10 +294,14 @@ if __name__ == "__main__":
     background_genes_path = args.background_genes
     study_genes_path = args.study_genes
     group = args.group
+    outdir = Path(args.outdir)
 
-    gm = GoatoolsManager(taxon_id, background_genes_path, study_genes_path, group)
+    gm = GoatoolsManager(taxon_id, background_genes_path, study_genes_path, group, outdir)
     gm.setup()
     results = gm.run()
     
-    grm = GoatoolsResultsManager(taxon_id, background_genes_path, study_genes_path, group)
+    grm = GoatoolsResultsManager(taxon_id, background_genes_path, study_genes_path, group, outdir)
     grm.run(results)
+    
+    grg = GoatoolsResultsGrapher()
+    grg.run(grm.outpath)

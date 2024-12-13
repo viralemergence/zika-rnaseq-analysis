@@ -29,4 +29,5 @@ singularity exec --pwd /src \
     python3 -u /src/app/goatools_analysis.py \
     -t 9407 -g $SLURM_ARRAY_TASK_ID \
     -b "/src/data/go_analysis/ncbi_gene_results_9407.txt" \
-    -s "/src/data/pydeseq2/degpatterns/R06E_PRV_gene_clusters.csv"
+    -s "/src/data/pydeseq2/degpatterns/R06E_PRV_gene_clusters.csv" \
+    -o "/src/data/go_analysis/R06E_PRV"
