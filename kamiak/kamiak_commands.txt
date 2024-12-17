@@ -205,3 +205,15 @@ singularity exec --pwd /src \
     -c /src/data/batch_effect_rectified/gene_counts_final.csv \
     -m /src/data/batch_effect_rectified/sample_metadata_final.csv \
     -g /src/data/pydeseq2/goi/goi_list.csv
+
+# To run gene relative abundance for Genes of Interest
+singularity exec --pwd /src \
+    --no-home \
+    --bind $HOST_APP_DIR:/src/app \
+    --bind $HOST_DATA_DESEQ_DIR:/src/data/pydeseq2 \
+    --bind $HOST_DATA_BATCH_EFFECT_DIR:/src/data/batch_effect_rectified \
+    $SINGULARITY_IMAGE \
+    python3 -u /src/app/gene_relative_abundance.py \
+    -c /src/data/batch_effect_rectified/gene_counts_final.csv \
+    -m /src/data/batch_effect_rectified/sample_metadata_final.csv \
+    -g /src/data/pydeseq2/lrt/R06E_PRV_LRT_results.csv
