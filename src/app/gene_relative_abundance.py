@@ -3,7 +3,9 @@ from collections import defaultdict
 from contextlib import contextmanager, redirect_stdout, redirect_stderr
 from csv import reader
 from math import log2
+import matplotlib.patches as mpatches
 import matplotlib.pyplot as plt # type: ignore
+from numpy import random
 from os import devnull
 import pandas as pd # type: ignore
 from pathlib import Path
@@ -22,6 +24,8 @@ class GeneRelativeAbundance:
         self.genes_of_interest = self.extract_genes_of_interest(genes_path)
         self.cell_line = genes_path.stem.split("_")[0]
         self.virus = genes_path.stem.split("_")[1]
+        
+        self.outdir = Path(f"/src/data/pydeseq2/relative_gene_abundance/{self.cell_line}_{self.virus}/")
 
     @staticmethod
     def extract_genes_of_interest(genes_path: Path, header: bool = True) -> list[str]:
@@ -52,7 +56,10 @@ class GeneRelativeAbundance:
             normalized_counts_of_interest = self.extract_transform_normalized_counts_of_interest(normalized_counts_by_virus, genes_of_interest, dds)            
             per_gene_stats = normalized_counts_of_interest.aggregate(["mean", "std"], axis=0).round(2)
             gene_relative_abundance_zscores = self.calculate_gene_relative_abundance_zscores(normalized_counts_of_interest, per_gene_stats)
-            zscore_stats = gene_relative_abundance_zscores.aggregate(["median", "std", self.percentile(0.25), self.percentile(0.50), self.percentile(0.75)], axis=1).round(2)
+            zscore_stats = gene_relative_abundance_zscores.aggregate(["median", "std", "min", "max",
+                                                                      self.percentile(0.25), self.percentile(0.50), self.percentile(0.75)], axis=1).round(2)
+
+            self.graph_gene_relative_abundance(gene_relative_abundance_zscores, zscore_stats, group, genes, self.cell_line, self.virus, self.outdir)
     
     @staticmethod
     def filter_for_cell_line(gene_counts: pd.DataFrame, sample_metadata: pd.DataFrame, cell_line: str) -> tuple[pd.DataFrame, pd.DataFrame]:
@@ -127,7 +134,7 @@ class GeneRelativeAbundance:
         for gene in normalized_counts_of_interest.keys():
             mean = per_gene_stats.loc["mean", gene]
             std = per_gene_stats.loc["std", gene]
-            gene_relative_abundance_zscores[gene] = gene_relative_abundance_zscores[gene].apply(lambda x: (x-mean)/std)
+            gene_relative_abundance_zscores[gene] = gene_relative_abundance_zscores[gene].apply(lambda x: round((x-mean)/std, 2))
         return gene_relative_abundance_zscores
 
     @staticmethod
@@ -137,27 +144,54 @@ class GeneRelativeAbundance:
         percentile_.__name__ = f"percentile_{percentile_threshold*100}"
         return percentile_
 
-    @classmethod
-    def gene_of_interest_graphs(cls, cell_line: str, virus: str, genes_of_interest: list[str], dds: DeseqDataSet) -> None:
-        normalized_counts = cls.extract_normalized_count_df_from_dds(dds)
-        genes_of_interest = cls.filter_genes_of_interest(genes_of_interest, normalized_counts)
+    @staticmethod
+    def graph_gene_relative_abundance(gene_relative_abundance_zscores: pd.DataFrame, zscore_stats: pd.DataFrame,
+                                      group: str, genes: list[str], cell_line: str, virus_: str, outdir: Path) -> None:
+        boxplot_data = defaultdict(lambda: defaultdict(list))
+        for time, virus in zscore_stats.index:
+            quartiles = [
+                zscore_stats.loc[(time, virus), "min"],
+                zscore_stats.loc[(time, virus), "percentile_25.0"],
+                zscore_stats.loc[(time, virus), "percentile_50.0"],
+                zscore_stats.loc[(time, virus), "percentile_75.0"],
+                zscore_stats.loc[(time, virus), "max"]
+                ]
+            boxplot_data[virus]["quartiles"].append(quartiles)
+            boxplot_data[virus]["line"].append(zscore_stats.loc[(time, virus), "percentile_50.0"])
+            boxplot_data[virus]["x_labels"].append(time)
+            boxplot_data[virus]["z_scores"].append(list(gene_relative_abundance_zscores.loc[(time, virus),]))
+            
+        fig, ax = plt.subplots()
+        base_colors = ["red", "blue"]
+        colors = iter(base_colors)
+        for virus, data in boxplot_data.items():
+            color = next(colors)
+            ax.boxplot(data["quartiles"], tick_labels=data["x_labels"],
+                        patch_artist=True,
+                        boxprops=dict(facecolor="none", color=color),
+                        medianprops=dict(color=color),
+                        whiskerprops=dict(color=color),
+                        capprops=dict(color="none"),
+                        flierprops=dict(color="none", markeredgecolor="none")
+                        )
+            ax.plot(list(range(1, len(data["line"])+1)), data["line"], color=color)
+            
+            for i, z_scores in enumerate(data["z_scores"], start=1):
+                x_values = random.normal(i, 0.075, size=len(z_scores))
+                ax.plot(x_values, z_scores, color=color, linestyle="None", marker="o", alpha=0.2)
 
-        normalized_counts_of_interest = normalized_counts[genes_of_interest].copy()
-        normalized_counts_of_interest["Time"] = dds.obs["Time"].astype(float).astype(int)
-        normalized_counts_of_interest["Virus"] = dds.obs["Virus"]
-        normalized_counts_of_interest["Virus"] = normalized_counts_of_interest["Virus"].apply(lambda x: "~No-Virus" if x == "No-Virus" else x)
-        normalized_counts_of_interest = normalized_counts_of_interest.sort_values("Virus")
-        normalized_counts_of_interest["Color"] = normalized_counts_of_interest["Virus"].apply(lambda x: "orange" if x == "~No-Virus" else "cornflowerblue")
+        ax.set_xlabel("Time (hr)")
+        ax.set_ylabel("Z score")
+        ax.set_title(f"Group: {group}, Genes: {len(genes)}")
+        ax.set_ylim(bottom=-2.5, top=2.5)
+        
+        legend_handles = [mpatches.Patch(color=color, label=virus) for color, virus in zip(base_colors, boxplot_data)]
+        ax.legend(handles=legend_handles)
 
-        grouped_counts = normalized_counts_of_interest.groupby(["Time", "Virus"])
-        for gene_id in genes_of_interest:
-            ax = grouped_counts[gene_id].mean().unstack().plot(legend=True, color=["royalblue", "darkorange"])
-            normalized_counts_of_interest.plot(x="Time", y=gene_id, kind="scatter", ax=ax, color=normalized_counts_of_interest["Color"], alpha=0.75)
-
-            figure_filename = f"{cell_line}_{virus}_{gene_id}.png"
-            figure_outpath = f"/src/data/pydeseq2/relative_gene_abundance/{cell_line}_{virus}/{figure_filename}"
-            plt.savefig(figure_outpath, bbox_inches="tight")
-            plt.close()
+        figure_filename = f"{cell_line}_{virus_}_group_{group}.png"
+        figure_outpath = outdir / figure_filename
+        plt.savefig(figure_outpath, bbox_inches="tight")
+        plt.close()
 
 if __name__ == "__main__":
     parser = ArgumentParser()
