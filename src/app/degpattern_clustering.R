@@ -16,7 +16,7 @@ sample_metadata$Time <- factor(sample_metadata$Time)
 sample_metadata$Virus <- factor(sample_metadata$Virus)
 
 pdf(file=degpatterns_figure_outpath)
-clusters <- degPatterns(log2(gene_counts), metadata=sample_metadata, summarize="Replicate", time="Time", col="Virus", plot=T)
+clusters <- degPatterns(log2(gene_counts), metadata=sample_metadata, time="Time", col="Virus", scale=T, plot=T)
 # Not sure if log2 is best here, but degpattern says input should be log2 normalized count matrix
 dev.off()
 

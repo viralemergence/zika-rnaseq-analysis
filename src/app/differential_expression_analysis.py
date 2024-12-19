@@ -36,7 +36,7 @@ class DifferentialExpressionAnalysis:
         print(f"Metadata listed cell lines: {cell_lines}")
 
         for cell_line in cell_lines:
-            if cell_line == "HypNi": # NOTE: Will want to remove for future projects
+            if cell_line in ["HypNi"]: # NOTE: Will want to remove for future projects
                 print(f"\nSkipping cell line: {cell_line}")
                 continue
             print(f"\nStarting on cell line: {cell_line}\n----------")

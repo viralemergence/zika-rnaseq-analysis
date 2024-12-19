@@ -1,4 +1,5 @@
 from argparse import ArgumentParser
+from collections import defaultdict
 from contextlib import contextmanager, redirect_stdout, redirect_stderr
 from csv import reader
 from math import log2
@@ -17,10 +18,11 @@ def suppress_stdout_stderr():
             yield(out, err)
 
 class GeneRelativeAbundance:
-    def __init__(self, genes_path: Path):
+    def __init__(self, genes_path: Path, cluster_path: Path):
         self.genes_of_interest = self.extract_genes_of_interest(genes_path)
         self.cell_line = genes_path.stem.split("_")[0]
         self.virus = genes_path.stem.split("_")[1]
+        self.clusters = self.extract_clusters(cluster_path)
 
     @staticmethod
     def extract_genes_of_interest(genes_path: Path, header: bool = True) -> list[str]:
@@ -37,7 +39,16 @@ class GeneRelativeAbundance:
                         continue
                     goi.append(line[0])
         return goi
-            # return list(set(map(lambda x: x[0].replace(".", "-"), reader_iterator)))
+
+    @staticmethod
+    def extract_clusters(cluster_path: Path) -> defaultdict[list[str]]:
+        clusters = defaultdict(list)
+        with cluster_path.open() as inhandle:
+            reader_iterator = reader(inhandle)
+            header = next(reader_iterator)
+            for line in reader_iterator:
+                clusters[int(line[1])].append(line[0])
+        return clusters
 
     def run(self, gene_counts: pd.DataFrame, sample_metadata: pd.DataFrame) -> None:
         print(len(self.genes_of_interest))
@@ -47,7 +58,6 @@ class GeneRelativeAbundance:
         gene_counts_by_cell_line, sample_metadata_by_cell_line = self.filter_for_cell_line(gene_counts, sample_metadata, self.cell_line)
 
         gene_counts_by_virus, sample_metadata_by_virus = self.filter_for_virus(gene_counts_by_cell_line, sample_metadata_by_cell_line, self.virus)
-        gene_counts_by_virus, sample_metadata_by_virus = self.remove_zero_time_point(gene_counts_by_virus, sample_metadata_by_virus)
 
         print("Starting pyDEseq2 analysis") # TODO: Could put all this in a "differential expression" function for easier reading
         with catch_warnings():
@@ -59,6 +69,7 @@ class GeneRelativeAbundance:
             dds.deseq2()
 
         normalized_counts = self.extract_normalized_count_df_from_dds(dds)
+        normalized_counts, sample_metadata_by_virus = self.remove_zero_time_point(normalized_counts, sample_metadata_by_virus)
         genes_of_interest = self.filter_genes_of_interest(self.genes_of_interest, normalized_counts)
         
         normalized_counts_of_interest = normalized_counts[genes_of_interest].copy().applymap(lambda x: log2(x + 1)) # NOTE: May not want 0 correction
@@ -68,19 +79,25 @@ class GeneRelativeAbundance:
         grouped_counts = normalized_counts_of_interest.groupby(["Time", "Virus"])
         grouped_replicate_means = grouped_counts.mean().round(2)
 
-        time_virus_stats = grouped_replicate_means.aggregate(["mean", "std"], axis=1).round(2)
+        gene_stats = grouped_replicate_means.aggregate(["mean", "std"], axis=0).round(2)
 
         relative_abundance_zscores = grouped_replicate_means.copy()
-        for time, virus in grouped_replicate_means.index:
-            mean = time_virus_stats.loc[(time, virus), "mean"]
-            std = time_virus_stats.loc[(time, virus), "std"]
-            relative_abundance_zscores.loc[(time, virus)] = relative_abundance_zscores.loc[(time, virus)].apply(lambda x: (x-mean)/std)
+        for gene in grouped_replicate_means.keys():
+            mean = gene_stats.loc["mean", gene]
+            std = gene_stats.loc["std", gene]
+            relative_abundance_zscores[gene] = relative_abundance_zscores[gene].apply(lambda x: (x-mean)/std)
+
+        cluster_genes = self.clusters[1]
+        cluster_zscores = relative_abundance_zscores[cluster_genes]
 
         def percentile(percentile_threshold: float):
             def percentile_(series: pd.Series):
                 return series.quantile(percentile_threshold)
             percentile_.__name__ = f"percentile_{percentile_threshold*100}"
             return percentile_
+        
+        cluster_zscore_stats = cluster_zscores.aggregate(["median", "std", percentile(0.25), percentile(0.50), percentile(0.75)], axis=1).round(2)
+        print(cluster_zscore_stats)
 
     @staticmethod
     def extract_cell_lines(sample_metadata: pd.DataFrame) -> set[str]:
@@ -162,10 +179,11 @@ if __name__ == "__main__":
     parser.add_argument("-c", "--counts", type=str, required=True)
     parser.add_argument("-m", "--metadata", type=str, required=True)
     parser.add_argument("-g", "--genes", type=str, required=True)
+    parser.add_argument("-k", "--clusters", type=str, required=True)
     args = parser.parse_args()
 
     gene_counts = pd.read_csv(args.counts, index_col=0)
     sample_metadata = pd.read_csv(args.metadata, index_col=0)
     
-    gra = GeneRelativeAbundance(Path(args.genes))
+    gra = GeneRelativeAbundance(Path(args.genes), Path(args.clusters))
     gra.run(gene_counts, sample_metadata)

@@ -216,4 +216,5 @@ singularity exec --pwd /src \
     python3 -u /src/app/gene_relative_abundance.py \
     -c /src/data/batch_effect_rectified/gene_counts_final.csv \
     -m /src/data/batch_effect_rectified/sample_metadata_final.csv \
-    -g /src/data/pydeseq2/lrt/R06E_PRV_LRT_results.csv
+    -g /src/data/pydeseq2/lrt/R06E_MR_LRT_results.csv \
+    -k /src/data/pydeseq2/degpatterns/R06E_MR_gene_clusters.csv
