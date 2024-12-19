@@ -39,44 +39,20 @@ class GeneRelativeAbundance:
 
         gene_counts_by_cell_line, sample_metadata_by_cell_line = self.filter_for_cell_line(gene_counts, sample_metadata, self.cell_line)
         gene_counts_by_virus, sample_metadata_by_virus = self.filter_for_virus(gene_counts_by_cell_line, sample_metadata_by_cell_line, self.virus)
+        
+        dds = self.pydeseq2_normalization(gene_counts_by_virus, sample_metadata_by_virus, design_factors)
 
-        print("Starting pyDEseq2 analysis") # TODO: Could put all this in a "differential expression" function for easier reading
-        with catch_warnings():
-            simplefilter("ignore")
-            dds = DeseqDataSet(counts=gene_counts_by_virus,
-                            metadata=sample_metadata_by_virus,
-                            design_factors=design_factors)
-        with suppress_stdout_stderr(): # NOTE: Primarily suppresses redundant messages in prod, but could suppress actual errors important for dev work
-            dds.deseq2()
-
-        normalized_counts = self.extract_normalized_count_df_from_dds(dds)
-        normalized_counts, sample_metadata_by_virus = self.remove_zero_time_point(normalized_counts, sample_metadata_by_virus)
+        normalized_counts_by_virus = self.extract_normalized_count_df_from_dds(dds)
+        normalized_counts_by_virus, sample_metadata_by_virus = self.remove_zero_time_point(normalized_counts_by_virus, sample_metadata_by_virus)
         
         for group, genes in self.genes_of_interest.items():
-            genes_of_interest = self.filter_genes_of_interest(genes, normalized_counts)
-            
-            normalized_counts_of_interest = normalized_counts[genes_of_interest].copy().applymap(lambda x: log2(x + 1)) # NOTE: May not want 0 correction
-            normalized_counts_of_interest["Time"] = dds.obs["Time"].astype(float).astype(int)
-            normalized_counts_of_interest["Virus"] = dds.obs["Virus"]
-            
-            grouped_counts = normalized_counts_of_interest.groupby(["Time", "Virus"])
-            grouped_replicate_means = grouped_counts.mean().round(2)
+            print(f"\nStarting on group: {group}")
+            genes_of_interest = self.filter_genes_of_interest(genes, normalized_counts_by_virus)
 
-            gene_stats = grouped_replicate_means.aggregate(["mean", "std"], axis=0).round(2)
-
-            relative_abundance_zscores = grouped_replicate_means.copy()
-            for gene in grouped_replicate_means.keys():
-                mean = gene_stats.loc["mean", gene]
-                std = gene_stats.loc["std", gene]
-                relative_abundance_zscores[gene] = relative_abundance_zscores[gene].apply(lambda x: (x-mean)/std)
-
-            def percentile(percentile_threshold: float):
-                def percentile_(series: pd.Series):
-                    return series.quantile(percentile_threshold)
-                percentile_.__name__ = f"percentile_{percentile_threshold*100}"
-                return percentile_
-            
-            zscore_stats = relative_abundance_zscores.aggregate(["median", "std", percentile(0.25), percentile(0.50), percentile(0.75)], axis=1).round(2)
+            normalized_counts_of_interest = self.extract_transform_normalized_counts_of_interest(normalized_counts_by_virus, genes_of_interest, dds)            
+            per_gene_stats = normalized_counts_of_interest.aggregate(["mean", "std"], axis=0).round(2)
+            gene_relative_abundance_zscores = self.calculate_gene_relative_abundance_zscores(normalized_counts_of_interest, per_gene_stats)
+            zscore_stats = gene_relative_abundance_zscores.aggregate(["median", "std", self.percentile(0.25), self.percentile(0.50), self.percentile(0.75)], axis=1).round(2)
     
     @staticmethod
     def filter_for_cell_line(gene_counts: pd.DataFrame, sample_metadata: pd.DataFrame, cell_line: str) -> tuple[pd.DataFrame, pd.DataFrame]:
@@ -90,6 +66,18 @@ class GeneRelativeAbundance:
         sample_metadata = sample_metadata[sample_metadata["Virus"].isin(virus_list)]
         gene_counts = gene_counts[gene_counts.index.isin(sample_metadata.index)]
         return gene_counts, sample_metadata
+
+    @staticmethod
+    def pydeseq2_normalization(gene_counts: pd.DataFrame, sample_metadata: pd.DataFrame, design_factors: list[str]) -> DeseqDataSet:
+        print("Starting pyDEseq2 analysis")
+        with catch_warnings():
+            simplefilter("ignore")
+            dds = DeseqDataSet(counts=gene_counts,
+                            metadata=sample_metadata,
+                            design_factors=design_factors)
+        with suppress_stdout_stderr(): # NOTE: Primarily suppresses redundant messages in prod, but could suppress actual errors important for dev work
+            dds.deseq2()
+        return dds
 
     @staticmethod
     def extract_normalized_count_df_from_dds(dds: DeseqDataSet) -> pd.DataFrame:
@@ -124,6 +112,30 @@ class GeneRelativeAbundance:
                 missing_genes_of_interest.append(gene)
         print(f"Missing the following GOI: {missing_genes_of_interest}")
         return filtered_genes_of_interest
+
+    @staticmethod
+    def extract_transform_normalized_counts_of_interest(normalized_counts: pd.DataFrame, genes_of_interest: list[str], dds: DeseqDataSet) -> pd.DataFrame:
+        normalized_counts_of_interest = normalized_counts[genes_of_interest].copy().applymap(lambda x: log2(x + 1)) # NOTE: May not want 0 correction
+        normalized_counts_of_interest["Time"] = dds.obs["Time"].astype(float).astype(int)
+        normalized_counts_of_interest["Virus"] = dds.obs["Virus"]
+        grouped_counts = normalized_counts_of_interest.groupby(["Time", "Virus"])
+        return grouped_counts.mean().round(2)
+
+    @staticmethod
+    def calculate_gene_relative_abundance_zscores(normalized_counts_of_interest: pd.DataFrame, per_gene_stats: pd.DataFrame):
+        gene_relative_abundance_zscores = normalized_counts_of_interest.copy()
+        for gene in normalized_counts_of_interest.keys():
+            mean = per_gene_stats.loc["mean", gene]
+            std = per_gene_stats.loc["std", gene]
+            gene_relative_abundance_zscores[gene] = gene_relative_abundance_zscores[gene].apply(lambda x: (x-mean)/std)
+        return gene_relative_abundance_zscores
+
+    @staticmethod
+    def percentile(percentile_threshold: float):
+        def percentile_(series: pd.Series) -> float:
+            return series.quantile(percentile_threshold)
+        percentile_.__name__ = f"percentile_{percentile_threshold*100}"
+        return percentile_
 
     @classmethod
     def gene_of_interest_graphs(cls, cell_line: str, virus: str, genes_of_interest: list[str], dds: DeseqDataSet) -> None:
