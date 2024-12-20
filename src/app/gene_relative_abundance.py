@@ -49,7 +49,15 @@ class GeneRelativeAbundance:
         normalized_counts_by_virus = self.extract_normalized_count_df_from_dds(dds)
         normalized_counts_by_virus, sample_metadata_by_virus = self.remove_zero_time_point(normalized_counts_by_virus, sample_metadata_by_virus)
         
-        for group, genes in self.genes_of_interest.items():
+        total_subplots = len(self.genes_of_interest)
+        subplot_columns = 3
+        subplot_rows = int(total_subplots / subplot_columns)
+        combined_fig, combined_ax = plt.subplots(subplot_rows, subplot_columns, figsize=(6.4, 4.8)) # NOTE: Will want to change figsize or make arg
+        #combined_fig, combined_ax = plt.subplots(subplot_rows, subplot_columns, figsize=(6.4, 9.6)) # NOTE: Will want to change figsize or make arg
+        for i, (group, genes) in enumerate(self.genes_of_interest.items()):
+            subplot_row = i // subplot_columns
+            subplot_column = i % subplot_columns
+
             print(f"\nStarting on group: {group}")
             genes_of_interest = self.filter_genes_of_interest(genes, normalized_counts_by_virus)
 
@@ -60,6 +68,13 @@ class GeneRelativeAbundance:
                                                                       self.percentile(0.25), self.percentile(0.50), self.percentile(0.75)], axis=1).round(2)
 
             self.graph_gene_relative_abundance(gene_relative_abundance_zscores, zscore_stats, group, genes, self.cell_line, self.virus, self.outdir)
+            self.combined_graph_gene_relative_abundance(gene_relative_abundance_zscores, zscore_stats, group, genes, combined_fig, combined_ax,
+                                                        subplot_row, subplot_column, subplot_rows)
+            
+        figure_filename = f"{self.cell_line}_{self.virus}_combined.png"
+        figure_outpath = self.outdir / figure_filename
+        combined_fig.savefig(figure_outpath, bbox_inches="tight")
+        plt.close(combined_fig)
     
     @staticmethod
     def filter_for_cell_line(gene_counts: pd.DataFrame, sample_metadata: pd.DataFrame, cell_line: str) -> tuple[pd.DataFrame, pd.DataFrame]:
@@ -191,10 +206,73 @@ class GeneRelativeAbundance:
         legend_handles = [mpatches.Patch(color=color, label=virus.replace("~","")) for color, virus in zip(base_colors, boxplot_data)]
         ax.legend(handles=legend_handles)
 
+        ax.grid()
+        ax.tick_params(grid_color="grey", grid_alpha=0.2)
+
         figure_filename = f"{cell_line}_{virus_}_group_{group}.png"
         figure_outpath = outdir / figure_filename
-        plt.savefig(figure_outpath, bbox_inches="tight")
-        plt.close()
+        fig.savefig(figure_outpath, bbox_inches="tight")
+        plt.close(fig)
+
+    @staticmethod
+    def combined_graph_gene_relative_abundance(gene_relative_abundance_zscores: pd.DataFrame, zscore_stats: pd.DataFrame,
+                                      group: str, genes: list[str], fig, ax, subplot_row: int, subplot_column: int, max_rows: int) -> None:
+        boxplot_data = defaultdict(lambda: defaultdict(list))
+        times = set()
+        for time, virus in zscore_stats.index:
+            quartiles = [
+                zscore_stats.loc[(time, virus), "min"],
+                zscore_stats.loc[(time, virus), "percentile_25.0"],
+                zscore_stats.loc[(time, virus), "percentile_50.0"],
+                zscore_stats.loc[(time, virus), "percentile_75.0"],
+                zscore_stats.loc[(time, virus), "max"]
+                ]
+            boxplot_data[virus]["quartiles"].append(quartiles)
+            boxplot_data[virus]["line"].append(zscore_stats.loc[(time, virus), "percentile_50.0"])
+            times.add(time)
+            boxplot_data[virus]["z_scores"].append(list(gene_relative_abundance_zscores.loc[(time, virus),]))
+            
+        base_colors = ["red", "blue"]
+        colors = iter(base_colors)
+        for virus, data in boxplot_data.items():
+            color = next(colors)
+            ax[subplot_row, subplot_column].boxplot(data["quartiles"],
+                        patch_artist=True,
+                        boxprops=dict(facecolor="none", color=color),
+                        medianprops=dict(color=color),
+                        whiskerprops=dict(color=color),
+                        capprops=dict(color="none"),
+                        flierprops=dict(color="none", markeredgecolor="none")
+                        )
+            ax[subplot_row, subplot_column].plot(list(range(1, len(data["line"])+1)), data["line"], color=color)
+            
+            for i, z_scores in enumerate(data["z_scores"], start=1):
+                x_values = random.normal(i, 0.075, size=len(z_scores))
+                ax[subplot_row, subplot_column].plot(x_values, z_scores, color=color, linestyle="None", marker="o", markersize=3, alpha=0.2)
+
+        ax[subplot_row, subplot_column].set_xticks(ticks=list(range(1, len(times)+1)), labels=sorted(times))
+        ax[subplot_row, subplot_column].set_ylim(bottom=-2.5, top=2.5)
+
+        ax[subplot_row, subplot_column].set_title(f"Group: {group}, Genes: {len(genes)}", loc="center", fontsize=10, pad=6,
+                                                          bbox={"facecolor": "lightgrey", "boxstyle":"square,pad=0.3"})
+        
+        if subplot_column != 0:
+            ax[subplot_row, subplot_column].tick_params(left=False, labelleft=False)
+        else:
+            ax[subplot_row, subplot_column].set_ylabel("Z score")
+            
+        if (subplot_row + 1) != max_rows:
+            ax[subplot_row, subplot_column].tick_params(bottom=False, labelbottom=False)
+        else:
+            ax[subplot_row, subplot_column].set_xlabel("Time (hr)")
+            
+        if subplot_column != 0 and (subplot_row + 1) == max_rows:
+            legend_handles = [mpatches.Patch(color=color, label=virus.replace("~","")) for color, virus in zip(base_colors, boxplot_data)]
+            fig.legend(handles=legend_handles, bbox_to_anchor=(0.9,0.5), loc="center left")
+            
+        ax[subplot_row, subplot_column].grid()
+        ax[subplot_row, subplot_column].tick_params(grid_color="grey", grid_alpha=0.2)
+
 
 if __name__ == "__main__":
     parser = ArgumentParser()
