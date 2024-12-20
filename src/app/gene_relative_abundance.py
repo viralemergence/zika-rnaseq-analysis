@@ -3,9 +3,9 @@ from collections import defaultdict
 from contextlib import contextmanager, redirect_stdout, redirect_stderr
 from csv import reader
 from math import log2
-import matplotlib.patches as mpatches
+import matplotlib.patches as mpatches # type: ignore
 import matplotlib.pyplot as plt # type: ignore
-from numpy import random
+from numpy import random # type: ignore
 from os import devnull
 import pandas as pd # type: ignore
 from pathlib import Path
@@ -125,6 +125,7 @@ class GeneRelativeAbundance:
         normalized_counts_of_interest = normalized_counts[genes_of_interest].copy().applymap(lambda x: log2(x + 1)) # NOTE: May not want 0 correction
         normalized_counts_of_interest["Time"] = dds.obs["Time"].astype(float).astype(int)
         normalized_counts_of_interest["Virus"] = dds.obs["Virus"]
+        normalized_counts_of_interest["Virus"] = normalized_counts_of_interest["Virus"].apply(lambda x: "~No-Virus" if x == "No-Virus" else x)
         grouped_counts = normalized_counts_of_interest.groupby(["Time", "Virus"])
         return grouped_counts.mean().round(2)
 
@@ -148,6 +149,7 @@ class GeneRelativeAbundance:
     def graph_gene_relative_abundance(gene_relative_abundance_zscores: pd.DataFrame, zscore_stats: pd.DataFrame,
                                       group: str, genes: list[str], cell_line: str, virus_: str, outdir: Path) -> None:
         boxplot_data = defaultdict(lambda: defaultdict(list))
+        times = set()
         for time, virus in zscore_stats.index:
             quartiles = [
                 zscore_stats.loc[(time, virus), "min"],
@@ -158,7 +160,7 @@ class GeneRelativeAbundance:
                 ]
             boxplot_data[virus]["quartiles"].append(quartiles)
             boxplot_data[virus]["line"].append(zscore_stats.loc[(time, virus), "percentile_50.0"])
-            boxplot_data[virus]["x_labels"].append(time)
+            times.add(time)
             boxplot_data[virus]["z_scores"].append(list(gene_relative_abundance_zscores.loc[(time, virus),]))
             
         fig, ax = plt.subplots()
@@ -166,7 +168,7 @@ class GeneRelativeAbundance:
         colors = iter(base_colors)
         for virus, data in boxplot_data.items():
             color = next(colors)
-            ax.boxplot(data["quartiles"], tick_labels=data["x_labels"],
+            ax.boxplot(data["quartiles"],
                         patch_artist=True,
                         boxprops=dict(facecolor="none", color=color),
                         medianprops=dict(color=color),
@@ -180,12 +182,13 @@ class GeneRelativeAbundance:
                 x_values = random.normal(i, 0.075, size=len(z_scores))
                 ax.plot(x_values, z_scores, color=color, linestyle="None", marker="o", alpha=0.2)
 
+        ax.set_xticks(ticks=list(range(1, len(times)+1)), labels=sorted(times))
         ax.set_xlabel("Time (hr)")
         ax.set_ylabel("Z score")
         ax.set_title(f"Group: {group}, Genes: {len(genes)}")
         ax.set_ylim(bottom=-2.5, top=2.5)
         
-        legend_handles = [mpatches.Patch(color=color, label=virus) for color, virus in zip(base_colors, boxplot_data)]
+        legend_handles = [mpatches.Patch(color=color, label=virus.replace("~","")) for color, virus in zip(base_colors, boxplot_data)]
         ax.legend(handles=legend_handles)
 
         figure_filename = f"{cell_line}_{virus_}_group_{group}.png"
