@@ -163,7 +163,7 @@ class GeneCountManager:
     
     @staticmethod
     def remove_blacklist_samples(gene_counts: pd.DataFrame) -> pd.DataFrame:
-        blacklist_samples = ["HypNi_ZIKV_PRVABC59_24_a_S35"]
+        blacklist_samples = ["HypNi_ZIKV_PRVABC59_24_a_S35", "Julianna-87_S31"]
         return gene_counts.drop(blacklist_samples, axis=1)
 
     @classmethod

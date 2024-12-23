@@ -2,7 +2,7 @@ from argparse import ArgumentParser
 from collections import defaultdict
 from contextlib import contextmanager, redirect_stdout, redirect_stderr
 from csv import reader
-from math import log2
+from math import ceil, log2
 import matplotlib.patches as mpatches # type: ignore
 import matplotlib.pyplot as plt # type: ignore
 from numpy import random # type: ignore
@@ -20,21 +20,21 @@ def suppress_stdout_stderr():
             yield(out, err)
 
 class GeneRelativeAbundance:
-    def __init__(self, genes_path: Path):
+    def __init__(self, genes_path: Path, cell_line: str, virus: str, outdir: Path) -> None:
         self.genes_of_interest = self.extract_genes_of_interest(genes_path)
-        self.cell_line = genes_path.stem.split("_")[0]
-        self.virus = genes_path.stem.split("_")[1]
-        
-        self.outdir = Path(f"/src/data/pydeseq2/relative_gene_abundance/{self.cell_line}_{self.virus}/")
+        self.cell_line = cell_line
+        self.virus = virus
+        self.outdir = outdir
 
     @staticmethod
-    def extract_genes_of_interest(genes_path: Path, header: bool = True) -> list[str]:
-        groups = defaultdict(list)
+    def extract_genes_of_interest(genes_path: Path, header: bool = True) -> dict[set[str]]:
+        groups = defaultdict(set)
         with genes_path.open() as inhandle:
             reader_iterator = reader(inhandle)
-            header = next(reader_iterator)
+            if header:
+                header_line = next(reader_iterator)
             for line in reader_iterator:
-                groups[str(line[1])].append(line[0])
+                groups[str(line[1])].add(line[0])
         return groups
 
     def run(self, gene_counts: pd.DataFrame, sample_metadata: pd.DataFrame) -> None:
@@ -51,7 +51,7 @@ class GeneRelativeAbundance:
         
         total_subplots = len(self.genes_of_interest)
         subplot_columns = 3
-        subplot_rows = int(total_subplots / subplot_columns)
+        subplot_rows = int(ceil(total_subplots / subplot_columns))
         combined_fig, combined_ax = plt.subplots(subplot_rows, subplot_columns, figsize=(6.4, 4.8)) # NOTE: Will want to change figsize or make arg
         #combined_fig, combined_ax = plt.subplots(subplot_rows, subplot_columns, figsize=(6.4, 9.6)) # NOTE: Will want to change figsize or make arg
         for i, (group, genes) in enumerate(self.genes_of_interest.items()):
@@ -63,6 +63,13 @@ class GeneRelativeAbundance:
 
             normalized_counts_of_interest = self.extract_transform_normalized_counts_of_interest(normalized_counts_by_virus, genes_of_interest, dds)            
             per_gene_stats = normalized_counts_of_interest.aggregate(["mean", "std"], axis=0).round(2)
+            
+            drop_genes = [] # NOTE: Turn into function
+            for gene in per_gene_stats:
+                if per_gene_stats.loc["mean", gene] == 0:
+                    drop_genes.append(gene)
+            normalized_counts_of_interest = normalized_counts_of_interest.drop(drop_genes, axis=1)
+
             gene_relative_abundance_zscores = self.calculate_gene_relative_abundance_zscores(normalized_counts_of_interest, per_gene_stats)
             zscore_stats = gene_relative_abundance_zscores.aggregate(["median", "std", "min", "max",
                                                                       self.percentile(0.25), self.percentile(0.50), self.percentile(0.75)], axis=1).round(2)
@@ -217,6 +224,11 @@ class GeneRelativeAbundance:
     @staticmethod
     def combined_graph_gene_relative_abundance(gene_relative_abundance_zscores: pd.DataFrame, zscore_stats: pd.DataFrame,
                                       group: str, genes: list[str], fig, ax, subplot_row: int, subplot_column: int, max_rows: int) -> None:
+        if max_rows == 1:
+            subplot_ax = ax[subplot_column]
+        else:
+            subplot_ax = ax[subplot_row, subplot_column]
+        
         boxplot_data = defaultdict(lambda: defaultdict(list))
         times = set()
         for time, virus in zscore_stats.index:
@@ -236,7 +248,7 @@ class GeneRelativeAbundance:
         colors = iter(base_colors)
         for virus, data in boxplot_data.items():
             color = next(colors)
-            ax[subplot_row, subplot_column].boxplot(data["quartiles"],
+            subplot_ax.boxplot(data["quartiles"],
                         patch_artist=True,
                         boxprops=dict(facecolor="none", color=color),
                         medianprops=dict(color=color),
@@ -244,34 +256,34 @@ class GeneRelativeAbundance:
                         capprops=dict(color="none"),
                         flierprops=dict(color="none", markeredgecolor="none")
                         )
-            ax[subplot_row, subplot_column].plot(list(range(1, len(data["line"])+1)), data["line"], color=color)
+            subplot_ax.plot(list(range(1, len(data["line"])+1)), data["line"], color=color)
             
             for i, z_scores in enumerate(data["z_scores"], start=1):
                 x_values = random.normal(i, 0.075, size=len(z_scores))
-                ax[subplot_row, subplot_column].plot(x_values, z_scores, color=color, linestyle="None", marker="o", markersize=3, alpha=0.2)
+                subplot_ax.plot(x_values, z_scores, color=color, linestyle="None", marker="o", markersize=3, alpha=0.2)
 
-        ax[subplot_row, subplot_column].set_xticks(ticks=list(range(1, len(times)+1)), labels=sorted(times))
-        ax[subplot_row, subplot_column].set_ylim(bottom=-2.5, top=2.5)
+        subplot_ax.set_xticks(ticks=list(range(1, len(times)+1)), labels=sorted(times))
+        subplot_ax.set_ylim(bottom=-2.5, top=2.5)
 
-        ax[subplot_row, subplot_column].set_title(f"Group: {group}, Genes: {len(genes)}", loc="center", fontsize=10, pad=6,
+        subplot_ax.set_title(f"Group: {group}, Genes: {len(genes)}", loc="center", fontsize=10, pad=6,
                                                           bbox={"facecolor": "lightgrey", "boxstyle":"square,pad=0.3"})
         
         if subplot_column != 0:
-            ax[subplot_row, subplot_column].tick_params(left=False, labelleft=False)
+            subplot_ax.tick_params(left=False, labelleft=False)
         else:
-            ax[subplot_row, subplot_column].set_ylabel("Z score")
+            subplot_ax.set_ylabel("Z score")
             
         if (subplot_row + 1) != max_rows:
-            ax[subplot_row, subplot_column].tick_params(bottom=False, labelbottom=False)
+            subplot_ax.tick_params(bottom=False, labelbottom=False)
         else:
-            ax[subplot_row, subplot_column].set_xlabel("Time (hr)")
+            subplot_ax.set_xlabel("Time (hr)")
             
         if subplot_column != 0 and (subplot_row + 1) == max_rows:
             legend_handles = [mpatches.Patch(color=color, label=virus.replace("~","")) for color, virus in zip(base_colors, boxplot_data)]
             fig.legend(handles=legend_handles, bbox_to_anchor=(0.9,0.5), loc="center left")
             
-        ax[subplot_row, subplot_column].grid()
-        ax[subplot_row, subplot_column].tick_params(grid_color="grey", grid_alpha=0.2)
+        subplot_ax.grid()
+        subplot_ax.tick_params(grid_color="grey", grid_alpha=0.2)
 
 
 if __name__ == "__main__":
@@ -279,10 +291,14 @@ if __name__ == "__main__":
     parser.add_argument("-c", "--counts", type=str, required=True)
     parser.add_argument("-m", "--metadata", type=str, required=True)
     parser.add_argument("-g", "--genes", type=str, required=True)
+    parser.add_argument("-l", "--cell_line", type=str, required=True)
+    parser.add_argument("-v", "--virus", type=str, required=True)
+    parser.add_argument("-o", "--outdir", type=str, required=True)
+
     args = parser.parse_args()
 
     gene_counts = pd.read_csv(args.counts, index_col=0)
     sample_metadata = pd.read_csv(args.metadata, index_col=0)
     
-    gra = GeneRelativeAbundance(Path(args.genes))
+    gra = GeneRelativeAbundance(Path(args.genes), args.cell_line, args.virus, Path(args.outdir))
     gra.run(gene_counts, sample_metadata)
