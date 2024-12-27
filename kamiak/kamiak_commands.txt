@@ -229,3 +229,23 @@ singularity exec --pwd /src \
     -m /src/data/batch_effect_rectified/sample_metadata_final.csv \
     -g /src/data/pydeseq2/relative_gene_abundance/literature_sanity_check_list.csv \
     -l R06E -v MR -o /src/data/pydeseq2/relative_gene_abundance/sanity_check
+
+singularity exec --pwd /src \
+    --no-home \
+    --bind $HOST_APP_DIR:/src/app \
+    --bind $HOST_DATA_DESEQ_DIR:/src/data/pydeseq2 \
+    --bind $HOST_DATA_BATCH_EFFECT_DIR:/src/data/batch_effect_rectified \
+    $SINGULARITY_IMAGE \
+    python3 -u /src/app/gene_count_correlation_matrix.py \
+    -c /src/data/batch_effect_rectified/gene_counts_final.csv \
+    -m /src/data/batch_effect_rectified/sample_metadata_final.csv \
+    -l R06E Aji -o /src/data/pydeseq2/correlations
+
+singularity exec --pwd /src \
+    --no-home \
+    --bind $HOST_APP_DIR:/src/app \
+    --bind $HOST_DATA_DESEQ_DIR:/src/data/pydeseq2 \
+    $SINGULARITY_IMAGE \
+    python3 -u /src/app/lrt_venn_diagram.py \
+    -c R06E Aji -v MR PRV \
+    -l /src/data/pydeseq2/lrt -o /src/data/pydeseq2/venn_diagrams
