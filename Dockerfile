@@ -72,3 +72,6 @@ RUN Rscript -e "BiocManager::install('DEGreport', ncpus=2)"
 
 # Install goatools
 RUN pip3 install goatools==1.4.12
+
+# Install matplotlib venn diagram extension
+RUN pip3 install matplotlib-venn==1.1.1
