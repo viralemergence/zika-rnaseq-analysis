@@ -75,3 +75,6 @@ RUN pip3 install goatools==1.4.12
 
 # Install matplotlib venn diagram extension
 RUN pip3 install matplotlib-venn==1.1.1
+
+# Install gseapy
+RUN pip3 install gseapy
