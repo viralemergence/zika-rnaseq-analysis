@@ -1,9 +1,8 @@
 from argparse import ArgumentParser
 from csv import reader
 import matplotlib.pyplot as plt # type: ignore
-from matplotlib_venn import venn3
+from matplotlib_venn import venn2 # type: ignore
 from pathlib import Path
-import seaborn as sns # type: ignore
 
 class LRTVennDiagram:
     def __init__(self, cell_lines: list[str], viruses: list[str], lrt_dir: Path, outdir: Path) -> None:
@@ -23,28 +22,23 @@ class LRTVennDiagram:
                 gene_set = self.extract_significant_lrt_genes(lrt_results)
                 gene_sets[f"{cell_line}_{virus}"] = gene_set
 
-        print(len(gene_sets))
-
-        return            
-        for f in "Uu":
-            fig, ax = plt.subplots()
+        set1 = gene_sets["R06E_MR"]
+        set2 = gene_sets["R06E_PRV"]
         
-            heatmap = sns.heatmap(correlation_matrix, ax=ax, vmin=0.9)
-            cbar = heatmap.collections[0].colorbar
-            cbar.set_label("Spearman Coefficient", labelpad=10)
-            columns = [4, 8]
-            for col in columns:
-                heatmap.axvline(col, color="white", lw=3)
-                heatmap.axhline(col, color="white", lw=3)
-            heatmap.set_xlabel("")
-            heatmap.set_ylabel("")
-            
-            heatmap.tick_params(left=False, bottom=False)
+        fig, ax = plt.subplots()
+        
+        venn_diagram = venn2([set1, set2], set_labels=["R06E MR", "R06E PRV"])
+        
+        circle_coordinates = (0.2, -0.75)
+        circle_test = plt.Circle(circle_coordinates, 0.1, facecolor="lightblue", edgecolor="none", clip_on=False)
+        ax.add_patch(circle_test)
+        ax.text(circle_coordinates[0], circle_coordinates[1], "0", ha="center", va="center")
+        ax.text(circle_coordinates[0], circle_coordinates[1]-.15, "Aji MR & PRV", ha="center", va="center")
 
-            figure_filename = f"{cell_line}_{method}_heatmap.png"
-            figure_outpath = self.outdir / figure_filename
-            fig.savefig(figure_outpath, bbox_inches="tight")
-            plt.close(fig)
+        figure_filename = f"lrt_results_venn_diagram.png"
+        figure_outpath = self.outdir / figure_filename
+        fig.savefig(figure_outpath, bbox_inches="tight")
+        plt.close(fig)
     
     @staticmethod
     def extract_significant_lrt_genes(lrt_results: Path) -> set[str]:
