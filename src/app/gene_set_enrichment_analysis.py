@@ -87,7 +87,10 @@ class GeneSetEnrichmentAnalysis:
         first_last_time_points = [time_points_of_interest[0], time_points_of_interest[-1]]
         for direction, data in gsea_collated_results.items():
             for time_point in first_last_time_points:
-                top_gene_sets_subset = list(data[time_point].head(5).index)
+                if direction == "up":
+                    top_gene_sets_subset = list(data[time_point].head(7).index)
+                if direction == "down":
+                    top_gene_sets_subset = list(data[time_point].head(1).index)
                 for gene_set in top_gene_sets_subset:
                     if gene_set not in top_gene_sets[direction]:
                         top_gene_sets[direction].append(gene_set)
