@@ -270,3 +270,15 @@ singularity exec --pwd /src \
     python3 -u /src/app/gene_set_enrichment_analysis.py \
     -c /src/data/pydeseq2/contrasts/R06E_virus_contrasts_per_time.csv \
     -o /src/data/pydeseq2/gsea
+
+singularity exec --pwd /src \
+    --no-home \
+    --bind $HOST_APP_DIR:/src/app \
+    --bind $HOST_DATA_BATCH_EFFECT_DIR:/src/data/batch_effect_rectified \
+    --bind $HOST_DATA_DESEQ_DIR:/src/data/pydeseq2 \
+    $SINGULARITY_IMAGE \
+    python3 -u /src/app/degpattern_orchestration.py \
+    -c /src/data/batch_effect_rectified/gene_counts_final.csv \
+    -m /src/data/batch_effect_rectified/sample_metadata_final.csv \
+    -k /src/data/pydeseq2/contrasts/R06E_virus_contrasts_per_time.csv \
+    -l R06E -o /src/data/pydeseq2/degpatterns
