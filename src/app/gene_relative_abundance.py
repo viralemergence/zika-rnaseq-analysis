@@ -20,10 +20,11 @@ def suppress_stdout_stderr():
             yield(out, err)
 
 class GeneRelativeAbundance:
-    def __init__(self, genes_path: Path, cell_line: str, virus: str, outdir: Path) -> None:
+    def __init__(self, genes_path: Path, cell_line: str, virus_contrast: str, outdir: Path) -> None:
         self.genes_of_interest = self.extract_genes_of_interest(genes_path)
         self.cell_line = cell_line
-        self.virus = virus
+        self.virus_contrast = virus_contrast
+        self.treatment, self.control = self.extract_conditions_from_contrast(virus_contrast)
         self.outdir = outdir
 
     @staticmethod
@@ -36,23 +37,32 @@ class GeneRelativeAbundance:
             for line in reader_iterator:
                 groups[str(line[1])].add(line[0])
         return groups
+    
+    @staticmethod
+    def extract_conditions_from_contrast(contrast: str) -> tuple[str, str]:
+        conditions = contrast.split("_vs_")
+        return conditions[0], conditions[1]
 
     def run(self, gene_counts: pd.DataFrame, sample_metadata: pd.DataFrame) -> None:
         design_factors = ["Time", "Virus"]
-        print(f"Cell line: {self.cell_line}\nVirus: {self.virus}")
+        print(f"Cell line: {self.cell_line}\nContrast: {self.virus_contrast}")
 
         gene_counts_by_cell_line, sample_metadata_by_cell_line = self.filter_for_cell_line(gene_counts, sample_metadata, self.cell_line)
-        gene_counts_by_virus, sample_metadata_by_virus = self.filter_for_virus(gene_counts_by_cell_line, sample_metadata_by_cell_line, self.virus)
+        gene_counts_by_virus, sample_metadata_by_virus = self.filter_for_virus_contrasts(gene_counts_by_cell_line, sample_metadata_by_cell_line,
+                                                                                         self.treatment, self.control)
         
         dds = self.pydeseq2_normalization(gene_counts_by_virus, sample_metadata_by_virus, design_factors)
 
         normalized_counts_by_virus = self.extract_normalized_count_df_from_dds(dds)
         normalized_counts_by_virus, sample_metadata_by_virus = self.remove_zero_time_point(normalized_counts_by_virus, sample_metadata_by_virus)
         
-        total_subplots = len(self.genes_of_interest)
+        desired_subplots = len(self.genes_of_interest)
         subplot_columns = 3
-        subplot_rows = int(ceil(total_subplots / subplot_columns))
-        combined_fig, combined_ax = plt.subplots(subplot_rows, subplot_columns, figsize=(6.4, 4.8)) # NOTE: Will want to change figsize or make arg
+        subplot_rows = int(ceil(desired_subplots / subplot_columns))
+        combined_fig, combined_ax = plt.subplots(subplot_rows, subplot_columns, figsize=(6.4, 1.2)) # NOTE: Will want to change figsize or make arg
+        #combined_fig, combined_ax = plt.subplots(subplot_rows, subplot_columns, figsize=(6.4, 2.4)) # NOTE: Will want to change figsize or make arg
+        #combined_fig, combined_ax = plt.subplots(subplot_rows, subplot_columns, figsize=(6.4, 4.8)) # NOTE: Will want to change figsize or make arg
+        #combined_fig, combined_ax = plt.subplots(subplot_rows, subplot_columns, figsize=(6.4, 7.2)) # NOTE: Will want to change figsize or make arg
         #combined_fig, combined_ax = plt.subplots(subplot_rows, subplot_columns, figsize=(6.4, 9.6)) # NOTE: Will want to change figsize or make arg
         for i, (group, genes) in enumerate(self.genes_of_interest.items()):
             subplot_row = i // subplot_columns
@@ -74,11 +84,19 @@ class GeneRelativeAbundance:
             zscore_stats = gene_relative_abundance_zscores.aggregate(["median", "std", "min", "max",
                                                                       self.percentile(0.25), self.percentile(0.50), self.percentile(0.75)], axis=1).round(2)
 
-            self.graph_gene_relative_abundance(gene_relative_abundance_zscores, zscore_stats, group, genes, self.cell_line, self.virus, self.outdir)
+            self.graph_gene_relative_abundance(gene_relative_abundance_zscores, zscore_stats, group, genes, self.cell_line, self.virus_contrast, self.outdir)
             self.combined_graph_gene_relative_abundance(gene_relative_abundance_zscores, zscore_stats, group, genes, combined_fig, combined_ax,
                                                         subplot_row, subplot_column, subplot_rows)
             
-        figure_filename = f"{self.cell_line}_{self.virus}_combined.png"
+        total_subplots = subplot_columns * subplot_rows
+        i += 1
+        while i < total_subplots:
+            subplot_row = i // subplot_columns
+            subplot_column = i % subplot_columns
+            combined_ax[subplot_row, subplot_column].remove()
+            i += 1
+        
+        figure_filename = f"{self.cell_line}_{self.virus_contrast}_combined.png"
         figure_outpath = self.outdir / figure_filename
         combined_fig.savefig(figure_outpath, bbox_inches="tight")
         plt.close(combined_fig)
@@ -90,8 +108,8 @@ class GeneRelativeAbundance:
         return gene_counts, sample_metadata
     
     @staticmethod
-    def filter_for_virus(gene_counts: pd.DataFrame, sample_metadata: pd.DataFrame, virus: str) -> tuple[pd.DataFrame, pd.DataFrame]:
-        virus_list = [virus, "No_Virus"]
+    def filter_for_virus_contrasts(gene_counts: pd.DataFrame, sample_metadata: pd.DataFrame, treatment: str, control: str) -> tuple[pd.DataFrame, pd.DataFrame]:
+        virus_list = [treatment, control]
         sample_metadata = sample_metadata[sample_metadata["Virus"].isin(virus_list)]
         gene_counts = gene_counts[gene_counts.index.isin(sample_metadata.index)]
         return gene_counts, sample_metadata
@@ -169,7 +187,7 @@ class GeneRelativeAbundance:
 
     @staticmethod
     def graph_gene_relative_abundance(gene_relative_abundance_zscores: pd.DataFrame, zscore_stats: pd.DataFrame,
-                                      group: str, genes: list[str], cell_line: str, virus_: str, outdir: Path) -> None:
+                                      group: str, genes: list[str], cell_line: str, virus_contrast: str, outdir: Path) -> None:
         boxplot_data = defaultdict(lambda: defaultdict(list))
         times = set()
         for time, virus in zscore_stats.index:
@@ -216,7 +234,7 @@ class GeneRelativeAbundance:
         ax.grid()
         ax.tick_params(grid_color="grey", grid_alpha=0.2)
 
-        figure_filename = f"{cell_line}_{virus_}_group_{group}.png"
+        figure_filename = f"{cell_line}_{virus_contrast}_group_{group}.png"
         figure_outpath = outdir / figure_filename
         fig.savefig(figure_outpath, bbox_inches="tight")
         plt.close(fig)
@@ -292,7 +310,7 @@ if __name__ == "__main__":
     parser.add_argument("-m", "--metadata", type=str, required=True)
     parser.add_argument("-g", "--genes", type=str, required=True)
     parser.add_argument("-l", "--cell_line", type=str, required=True)
-    parser.add_argument("-v", "--virus", type=str, required=True)
+    parser.add_argument("-v", "--virus_contrast", type=str, required=True)
     parser.add_argument("-o", "--outdir", type=str, required=True)
 
     args = parser.parse_args()
@@ -300,5 +318,5 @@ if __name__ == "__main__":
     gene_counts = pd.read_csv(args.counts, index_col=0)
     sample_metadata = pd.read_csv(args.metadata, index_col=0)
     
-    gra = GeneRelativeAbundance(Path(args.genes), args.cell_line, args.virus, Path(args.outdir))
+    gra = GeneRelativeAbundance(Path(args.genes), args.cell_line, args.virus_contrast, Path(args.outdir))
     gra.run(gene_counts, sample_metadata)
