@@ -175,7 +175,7 @@ class GoatoolsResultsManager(GoatoolsManager):
             
             info = {"go_id": r.GO,
                     "go_name": f'"{r.goterm.name}"',
-                    "p-val": round(r.p_uncorrected, 5),
+                    "p-val": round(r.p_uncorrected, 10),
                     "genes": go_genes}
             grouped_results[group_go_term].append(info)
         return grouped_results

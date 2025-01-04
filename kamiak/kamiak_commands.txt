@@ -190,9 +190,9 @@ singularity exec --pwd /src \
     $SINGULARITY_IMAGE \
     python3 -u /src/app/goatools_analysis.py \
     -t 9407 -g 0 \
-    -b "/src/data/go_analysis/ncbi_gene_results_9407.txt" \
-    -s "/src/data/pydeseq2/degpatterns/R06E_MR_gene_clusters.csv" \
-    -o "/src/data/go_analysis"
+    -b /src/data/go_analysis/ncbi_gene_results_9407.txt \
+    -s /src/data/pydeseq2/degpatterns/R06E_MR_vs_No_Virus_gene_clusters.csv \
+    -o /src/data/go_analysis/R06E_MR_vs_No_Virus
 
 # To run PyDeseq2 for Genes of Interest
 singularity exec --pwd /src \
@@ -207,17 +207,6 @@ singularity exec --pwd /src \
     -g /src/data/pydeseq2/goi/goi_list.csv
 
 # To run gene relative abundance for Genes of Interest
-singularity exec --pwd /src \
-    --no-home \
-    --bind $HOST_APP_DIR:/src/app \
-    --bind $HOST_DATA_DESEQ_DIR:/src/data/pydeseq2 \
-    --bind $HOST_DATA_BATCH_EFFECT_DIR:/src/data/batch_effect_rectified \
-    $SINGULARITY_IMAGE \
-    python3 -u /src/app/gene_relative_abundance.py \
-    -c /src/data/batch_effect_rectified/gene_counts_final.csv \
-    -m /src/data/batch_effect_rectified/sample_metadata_final.csv \
-    -g /src/data/pydeseq2/degpatterns/R06E_MR_gene_clusters.csv
-
 singularity exec --pwd /src \
     --no-home \
     --bind $HOST_APP_DIR:/src/app \

@@ -6,7 +6,7 @@
 #SBATCH --mail-type=ALL
 #SBATCH --mail-user=alexander.brown@wsu.edu
 #SBATCH --time=1-00:00:00
-#SBATCH --array=0-2:1,4,6,8,12%10
+#SBATCH --array=0-2:1,4-7:1,10,15%10
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=2
@@ -29,5 +29,5 @@ singularity exec --pwd /src \
     python3 -u /src/app/goatools_analysis.py \
     -t 9407 -g $SLURM_ARRAY_TASK_ID \
     -b "/src/data/go_analysis/ncbi_gene_results_9407.txt" \
-    -s "/src/data/pydeseq2/degpatterns/R06E_PRV_gene_clusters.csv" \
-    -o "/src/data/go_analysis/R06E_PRV"
+    -s "/src/data/pydeseq2/degpatterns/R06E_PRV_vs_No_Virus_gene_clusters.csv" \
+    -o "/src/data/go_analysis/R06E_PRV_vs_No_Virus"
