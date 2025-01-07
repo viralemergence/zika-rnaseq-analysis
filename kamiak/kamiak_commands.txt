@@ -250,3 +250,13 @@ singularity exec --pwd /src \
     -b /src/data/go_analysis/ncbi_gene_results_9407.txt \
     -s /src/data/pydeseq2/degpatterns/R06E_MR_vs_No_Virus_gene_clusters.csv \
     -o /src/data/go_analysis/R06E_MR_vs_No_Virus
+
+# To extract degs from contrasts file
+singularity exec --pwd /src \
+    --no-home \
+    --bind $HOST_APP_DIR:/src/app \
+    --bind $HOST_DATA_DESEQ_DIR:/src/data/pydeseq2 \
+    $SINGULARITY_IMAGE \
+    python3 -u /src/app/extract_degs.py \
+    -k /src/data/pydeseq2/contrasts/R06E_virus_contrasts_per_time.csv \
+    -l R06E -o /src/data/pydeseq2/degs
