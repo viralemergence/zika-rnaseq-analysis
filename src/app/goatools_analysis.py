@@ -114,7 +114,7 @@ class GoatoolsManager:
                     study_genes.add(line[0])
             else:
                 for line in reader_iterator:
-                    cluster = int(line[1])
+                    cluster = str(line[1])
                     if cluster != group:
                         continue
                     study_genes.add(line[0])
@@ -293,7 +293,7 @@ if __name__ == "__main__":
     parser.add_argument("-b", "--background_genes", type=str, required=True)
     parser.add_argument("-s", "--study_genes", type=str, required=True)
     parser.add_argument("-o", "--outdir", type=str, required=True)
-    parser.add_argument("-g", "--group", type=int, required=True,
+    parser.add_argument("-g", "--group", type=str, required=True,
                         help="0 includes all groups, whereas any other number will extract only genes associated with that group")
     args = parser.parse_args()
 
