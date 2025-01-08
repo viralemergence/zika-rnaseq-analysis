@@ -44,7 +44,7 @@ class GeneSetEnrichmentAnalysis:
                     print(f"Starting on time: {time_point}")
                     time_point_results = deseq_results[time_point].copy()
                     ranked_genes = self.rank_genes(time_point_results, direction)
-                    self.run_gsea_and_append(ranked_genes, gsea_collated_results, direction, time_point)
+                    self.run_gsea_and_append(ranked_genes, gsea_collated_results, direction, time_point, contrast, self.outdir)
                 
             print("Starting top gene set parsing")
             top_gene_sets = self.extract_top_gene_sets(expression_directionality, time_points_of_interest, gsea_collated_results)
@@ -66,9 +66,14 @@ class GeneSetEnrichmentAnalysis:
         return time_point_results[["Gene", "Rank"]].reset_index(drop=True)
 
     @staticmethod
-    def run_gsea_and_append(ranked_genes: pd.DataFrame, gsea_collated_results: dict[dict[pd.DataFrame]], direction: str, time_point: float) -> None:
+    def run_gsea_and_append(ranked_genes: pd.DataFrame, gsea_collated_results: dict[dict[pd.DataFrame]], direction: str,
+                            time_point: float, contrast: str, outdir: Path) -> None:
         with suppress_stdout_stderr():
-            gsea_results = prerank(rnk=ranked_genes, gene_sets="KEGG_2021_Human", seed=7).results
+            if contrast == "MR_vs_PRV" and time_point == 6.0 and direction == "up":
+                gsea_outdir = outdir / contrast
+                gsea_results = prerank(rnk=ranked_genes, gene_sets="KEGG_2021_Human", seed=7, outdir=gsea_outdir).results
+            else:
+                gsea_results = prerank(rnk=ranked_genes, gene_sets="KEGG_2021_Human", seed=7).results
         parsed_results = []
         for term, data in gsea_results.items():
             parsed_results.append([term,

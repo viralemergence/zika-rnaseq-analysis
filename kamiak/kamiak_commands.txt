@@ -204,6 +204,7 @@ singularity exec --pwd /src \
     -l R06E -v MRvsNo_Virus PRVvsNo_Virus MRvsPRV \
     -o /src/data/pydeseq2/contrasts
 
+# To run GSEApy
 singularity exec --pwd /src \
     --bind $HOST_APP_DIR:/src/app \
     --bind $HOST_DATA_DESEQ_DIR:/src/data/pydeseq2 \
