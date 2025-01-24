@@ -5,7 +5,6 @@ singularity pull ./src/singularity_image/zika.sif docker://alexanderbrown1313/zi
 
 # Command prep
 SINGULARITY_IMAGE="/home/alexander.brown/zika-rnaseq-analysis/src/singularity_image/zika.sif"
-MAKEFILE="/src/container_commands/Makefile"
 
 HOST_APP_DIR="/home/alexander.brown/zika-rnaseq-analysis/src/app"
 HOST_DATA_DIR="/home/alexander.brown/zika-rnaseq-analysis/src/data"
@@ -157,30 +156,7 @@ singularity exec --pwd /src \
     -c /src/data/batch_effect_rectified/gene_counts_final.csv \
     -m /src/data/batch_effect_rectified/sample_metadata_final.csv
 
-# To test R degpattern function
-singularity exec --pwd /src \
-    --no-home \
-    --env LC_ALL=C.UTF-8 \
-    --bind $HOST_APP_DIR:/src/app \
-    --bind $HOST_DATA_DESEQ_DIR:/src/data/pydeseq2 \
-    $SINGULARITY_IMAGE \
-    Rscript /src/app/degpattern_clustering.R \
-    "/src/data/pydeseq2/degpattern/gene_counts_degpattern_input.csv" \
-    "/src/data/pydeseq2/degpattern/sample_metadata_degpattern_input.csv" \
-    "/src/data/pydeseq2/degpattern/gene_clusters.csv"
-
-# To run PyDeseq2 for Genes of Interest
-singularity exec --pwd /src \
-    --no-home \
-    --bind $HOST_APP_DIR:/src/app \
-    --bind $HOST_DATA_DESEQ_DIR:/src/data/pydeseq2 \
-    --bind $HOST_DATA_BATCH_EFFECT_DIR:/src/data/batch_effect_rectified \
-    $SINGULARITY_IMAGE \
-    python3 -u /src/app/dea_goi.py \
-    -c /src/data/batch_effect_rectified/gene_counts_final.csv \
-    -m /src/data/batch_effect_rectified/sample_metadata_final.csv \
-    -g /src/data/pydeseq2/goi/goi_list.csv
-
+# Figure 1B, D: Spearman correlations
 singularity exec --pwd /src \
     --no-home \
     --bind $HOST_APP_DIR:/src/app \
@@ -192,6 +168,7 @@ singularity exec --pwd /src \
     -m /src/data/batch_effect_rectified/sample_metadata_final.csv \
     -l R06E Aji -o /src/data/pydeseq2/correlations
 
+# Calculate virus contrasts per time
 singularity exec --pwd /src \
     --no-home \
     --bind $HOST_APP_DIR:/src/app \
@@ -204,7 +181,7 @@ singularity exec --pwd /src \
     -l R06E -v MRvsNo_Virus PRVvsNo_Virus MRvsPRV \
     -o /src/data/pydeseq2/contrasts
 
-# To run GSEApy
+# Figure 2: GSEA
 singularity exec --pwd /src \
     --bind $HOST_APP_DIR:/src/app \
     --bind $HOST_DATA_DESEQ_DIR:/src/data/pydeseq2 \
@@ -214,32 +191,17 @@ singularity exec --pwd /src \
     -c /src/data/pydeseq2/contrasts/R06E_virus_contrasts_per_time.csv \
     -o /src/data/pydeseq2/gsea
 
+# Extract DEGs from contrasts file
 singularity exec --pwd /src \
     --no-home \
     --bind $HOST_APP_DIR:/src/app \
-    --bind $HOST_DATA_BATCH_EFFECT_DIR:/src/data/batch_effect_rectified \
     --bind $HOST_DATA_DESEQ_DIR:/src/data/pydeseq2 \
     $SINGULARITY_IMAGE \
-    python3 -u /src/app/degpattern_orchestration.py \
-    -c /src/data/batch_effect_rectified/gene_counts_final.csv \
-    -m /src/data/batch_effect_rectified/sample_metadata_final.csv \
+    python3 -u /src/app/extract_degs.py \
     -k /src/data/pydeseq2/contrasts/R06E_virus_contrasts_per_time.csv \
-    -l R06E -o /src/data/pydeseq2/degpatterns
+    -l R06E -o /src/data/pydeseq2/degs
 
-# To run gene relative abundance for Genes of Interest
-singularity exec --pwd /src \
-    --no-home \
-    --bind $HOST_APP_DIR:/src/app \
-    --bind $HOST_DATA_DESEQ_DIR:/src/data/pydeseq2 \
-    --bind $HOST_DATA_BATCH_EFFECT_DIR:/src/data/batch_effect_rectified \
-    $SINGULARITY_IMAGE \
-    python3 -u /src/app/gene_relative_abundance.py \
-    -c /src/data/batch_effect_rectified/gene_counts_final.csv \
-    -m /src/data/batch_effect_rectified/sample_metadata_final.csv \
-    -g /src/data/pydeseq2/degpatterns/R06E_MR_vs_No_Virus_gene_clusters.csv \
-    -l R06E -v MR_vs_No_Virus -o /src/data/pydeseq2/relative_gene_abundance/R06E_MR_vs_No_Virus
-
-# To test goatools
+# Figure 3 & Figure 4B, D, F: GOEA
 singularity exec --pwd /src \
     --no-home \
     --bind $HOST_APP_DIR:/src/app \
@@ -252,21 +214,39 @@ singularity exec --pwd /src \
     -s /src/data/pydeseq2/degpatterns/R06E_MR_vs_No_Virus_gene_clusters.csv \
     -o /src/data/go_analysis/R06E_MR_vs_No_Virus
 
-# To extract degs from contrasts file
+# Figure 4A, C, E: DEGpattern
 singularity exec --pwd /src \
     --no-home \
     --bind $HOST_APP_DIR:/src/app \
+    --bind $HOST_DATA_BATCH_EFFECT_DIR:/src/data/batch_effect_rectified \
     --bind $HOST_DATA_DESEQ_DIR:/src/data/pydeseq2 \
     $SINGULARITY_IMAGE \
-    python3 -u /src/app/extract_degs.py \
+    python3 -u /src/app/degpattern_orchestration.py \
+    -c /src/data/batch_effect_rectified/gene_counts_final.csv \
+    -m /src/data/batch_effect_rectified/sample_metadata_final.csv \
     -k /src/data/pydeseq2/contrasts/R06E_virus_contrasts_per_time.csv \
-    -l R06E -o /src/data/pydeseq2/degs
+    -l R06E -o /src/data/pydeseq2/degpatterns
 
-# To test R pathview function
+# Figure 4A, C, E: Graph DEGpattern results as relative gene abundance
 singularity exec --pwd /src \
     --no-home \
-    --env LC_ALL=C.UTF-8 \
+    --bind $HOST_APP_DIR:/src/app \
+    --bind $HOST_DATA_DESEQ_DIR:/src/data/pydeseq2 \
+    --bind $HOST_DATA_BATCH_EFFECT_DIR:/src/data/batch_effect_rectified \
+    $SINGULARITY_IMAGE \
+    python3 -u /src/app/gene_relative_abundance.py \
+    -c /src/data/batch_effect_rectified/gene_counts_final.csv \
+    -m /src/data/batch_effect_rectified/sample_metadata_final.csv \
+    -g /src/data/pydeseq2/degpatterns/R06E_MR_vs_No_Virus_gene_clusters.csv \
+    -l R06E -v MR_vs_No_Virus -o /src/data/pydeseq2/relative_gene_abundance/R06E_MR_vs_No_Virus
+
+# To extract goi from contrasts file
+singularity exec --pwd /src \
+    --no-home \
     --bind $HOST_APP_DIR:/src/app \
     --bind $HOST_DATA_DESEQ_DIR:/src/data/pydeseq2 \
     $SINGULARITY_IMAGE \
-    Rscript /src/app/pathview.R
+    python3 -u /src/app/extract_goi_for_pathway_view.py \
+    -k /src/data/pydeseq2/contrasts/R06E_virus_contrasts_per_time.csv \
+    -g /src/data/pydeseq2/relative_gene_abundance/MR_vs_PRV_cytokine.csv \
+    -l R06E -o /src/data/pydeseq2/
