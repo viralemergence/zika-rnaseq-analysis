@@ -3,7 +3,7 @@ from collections import defaultdict
 from contextlib import contextmanager, redirect_stdout, redirect_stderr
 from gseapy import prerank # type: ignore
 import matplotlib.pyplot as plt # type: ignore
-from numpy import log10 # type: ignore
+from numpy import log10, nan, where # type: ignore
 from os import devnull
 import pandas as pd # type: ignore
 from pathlib import Path
@@ -58,9 +58,13 @@ class GeneSetEnrichmentAnalysis:
     def rank_genes(time_point_results: pd.DataFrame, direction: str) -> pd.DataFrame:
         with suppress_stdout_stderr():
             if direction == "up":
-                time_point_results["Rank"] = -log10(time_point_results["padj"]*time_point_results["log2FoldChange"])
+                time_point_results["Rank"] = where(time_point_results["log2FoldChange"] > 0,
+                                                   -log10(time_point_results["padj"])*time_point_results["log2FoldChange"],
+                                                   nan)
             if direction == "down":
-                time_point_results["Rank"] = -log10(time_point_results["padj"]*(-1*time_point_results["log2FoldChange"]))
+                time_point_results["Rank"] = where(time_point_results["log2FoldChange"] < -0,
+                                                   -log10(time_point_results["padj"])*(-1*time_point_results["log2FoldChange"]),
+                                                   nan)
         time_point_results = time_point_results.sort_values("Rank", ascending = False)
         time_point_results["Gene"] = time_point_results.index
         return time_point_results[["Gene", "Rank"]].reset_index(drop=True)
@@ -68,11 +72,11 @@ class GeneSetEnrichmentAnalysis:
     @staticmethod
     def run_gsea_and_append(ranked_genes: pd.DataFrame, gsea_collated_results: dict[dict[pd.DataFrame]], direction: str,
                             time_point: float, contrast: str, outdir: Path) -> None:
-        with suppress_stdout_stderr():
-            if contrast == "MR_vs_PRV" and time_point == 6.0 and direction == "up":
-                gsea_outdir = outdir / contrast
-                gsea_results = prerank(rnk=ranked_genes, gene_sets="KEGG_2021_Human", seed=7, outdir=gsea_outdir).results
-            else:
+        if contrast == "MR_vs_PRV" and time_point == 6.0 and direction == "up":
+            gsea_outdir = outdir / contrast
+            gsea_results = prerank(rnk=ranked_genes, gene_sets="KEGG_2021_Human", seed=7, outdir=gsea_outdir).results
+        else:
+            with suppress_stdout_stderr():
                 gsea_results = prerank(rnk=ranked_genes, gene_sets="KEGG_2021_Human", seed=7).results
         parsed_results = []
         for term, data in gsea_results.items():
