@@ -1,8 +1,5 @@
 from argparse import ArgumentParser
-from collections import defaultdict
 from contextlib import contextmanager, redirect_stdout, redirect_stderr
-from itertools import chain
-import matplotlib.patches as mpatches # type: ignore
 import matplotlib.pyplot as plt # type: ignore
 from os import devnull
 import pandas as pd # type: ignore
@@ -34,41 +31,32 @@ class GeneCountCorrelations:
             normalized_counts_by_cell_line, sample_metadata_by_cell_line = self.remove_zero_time_point(normalized_counts_by_cell_line, sample_metadata_by_cell_line)
 
             normalized_counts = self.transform_normalized_counts(normalized_counts_by_cell_line, dds)
-            per_gene_stats = normalized_counts.aggregate(["mean", "std"], axis=0).round(2)
-
-            drop_genes = [] # NOTE: Turn into function
-            for gene in per_gene_stats:
-                if per_gene_stats.loc["mean", gene] == 0:
-                    drop_genes.append(gene)
-            normalized_counts = normalized_counts.drop(drop_genes, axis=1)
-            
-            custom_order = ["No Virus", "MR", "PRV"]
-            normalized_counts = normalized_counts.sort_index(key=lambda x: x.map(dict(zip(custom_order, range(len(custom_order))))))
+            normalized_counts = self.remove_low_gene_counts(normalized_counts)
+            normalized_counts = self.reformat_dataframe(normalized_counts)
             
             method = "spearman"
-            correlation_matrix = normalized_counts.T.corr(method=method)
-            correlation_matrix = correlation_matrix.apply(lambda x: round(x, 4))
-            max_value = correlation_matrix.max().max()
-            min_value = correlation_matrix.min().min()
-            print(f"{max_value}, {min_value}")
-            
-            fig, ax = plt.subplots()
+            correlation_matrix = self.calculate_correlation_matrix(normalized_counts, method)
+
+            sns.set(font="sans-serif", font_scale=0.6)
+            fig, ax = plt.subplots(figsize=(2.5, 2.5))
         
-            heatmap = sns.heatmap(correlation_matrix, ax=ax, vmin=0.9)
+            heatmap = sns.heatmap(correlation_matrix, ax=ax, vmin=0.9, square=True, cbar_kws={"shrink": 0.75})
             cbar = heatmap.collections[0].colorbar
             cbar.set_label("Spearman Coefficient", labelpad=10)
+
             columns = [4, 8]
+            line_width = 2
             for col in columns:
-                heatmap.axvline(col, color="white", lw=3)
-                heatmap.axhline(col, color="white", lw=3)
+                heatmap.axvline(col, color="white", lw=line_width)
+                heatmap.axhline(col, color="white", lw=line_width)
             heatmap.set_xlabel("")
             heatmap.set_ylabel("")
             
-            heatmap.tick_params(left=False, bottom=False)
+            heatmap.tick_params(left=False, bottom=False, pad=0)
 
             figure_filename = f"{cell_line}_{method}_heatmap.png"
             figure_outpath = self.outdir / figure_filename
-            fig.savefig(figure_outpath, bbox_inches="tight")
+            fig.savefig(figure_outpath, bbox_inches="tight", dpi=300)
             plt.close(fig)
     
     @staticmethod
@@ -119,6 +107,32 @@ class GeneCountCorrelations:
         normalized_counts["Virus"] = normalized_counts["Virus"].apply(lambda x : x.replace("-", " "))
         grouped_counts = normalized_counts.groupby(["Virus", "Time"])
         return grouped_counts.mean().round(2)
+
+    @staticmethod
+    def remove_low_gene_counts(normalized_counts: pd.DataFrame) -> pd.DataFrame:
+        per_gene_stats = normalized_counts.aggregate(["mean", "std"], axis=0).round(2)
+
+        drop_genes = []
+        for gene in per_gene_stats:
+            if per_gene_stats.loc["mean", gene] == 0:
+                drop_genes.append(gene)
+        return normalized_counts.drop(drop_genes, axis=1)
+
+    @staticmethod
+    def reformat_dataframe(normalized_counts: pd.DataFrame) -> pd.DataFrame:
+        custom_order = ["No Virus", "MR", "PRV"]
+        normalized_counts = normalized_counts.sort_index(key=lambda x: x.map(dict(zip(custom_order, range(len(custom_order))))))
+        rename_columns = {"MR": "MR766", "PRV": "PRVABC59"}
+        return normalized_counts.rename(index=rename_columns)
+
+    @staticmethod
+    def calculate_correlation_matrix(normalized_counts: pd.DataFrame, method="spearman") -> pd.DataFrame:
+        correlation_matrix = normalized_counts.T.corr(method=method)
+        correlation_matrix = correlation_matrix.apply(lambda x: round(x, 4))
+        max_value = correlation_matrix.max().max()
+        min_value = correlation_matrix.min().min()
+        print(f"{max_value}, {min_value}")
+        return correlation_matrix
 
 if __name__ == "__main__":
     parser = ArgumentParser()
