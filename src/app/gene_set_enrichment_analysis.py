@@ -28,7 +28,7 @@ class GeneSetEnrichmentAnalysis:
         return df
 
     def run(self) -> None:
-        time_points_of_interest = [6.0, 12.0, 24.0, 48.0]
+        time_points = [6.0, 12.0, 24.0, 48.0]
         expression_directionality = ["up", "down"]
 
         for contrast, deseq_results in self.count_contrasts.groupby(level=0, axis=1):
@@ -39,18 +39,25 @@ class GeneSetEnrichmentAnalysis:
             gsea_collated_results = defaultdict(lambda: dict())
             
             for direction in expression_directionality:
+                if direction == "down":
+                    # NOTE: Manual observation showed down regulated pathways were not significant,
+                    #  so this is skipped for now to reduce time when re-running during dev work
+                    continue
                 print(f"Starting on {direction} regulated gene sets")
-                for time_point in time_points_of_interest:
+                for time_point in time_points:
                     print(f"Starting on time: {time_point}")
                     time_point_results = deseq_results[time_point].copy()
                     ranked_genes = self.rank_genes(time_point_results, direction)
                     self.run_gsea_and_append(ranked_genes, gsea_collated_results, direction, time_point, contrast, self.outdir)
-                
+
+            self.remove_high_fdr_gene_sets(gsea_collated_results, time_points=[6.0], threshold=0.1)
+            self.remove_negative_nes_gene_sets(gsea_collated_results)
+
             print("Starting top gene set parsing")
-            top_gene_sets = self.extract_top_gene_sets(expression_directionality, time_points_of_interest, gsea_collated_results)
+            top_gene_sets = self.extract_top_gene_sets(expression_directionality, [6.0], gsea_collated_results)
 
             print("Starting top gene set concat")
-            heatmap_dataframe = self.generate_heatmap_dataframe(gsea_collated_results, time_points_of_interest, top_gene_sets)
+            heatmap_dataframe = self.generate_heatmap_dataframe(gsea_collated_results, time_points, top_gene_sets)
             
             self.generate_heatmap(heatmap_dataframe, contrast, self.outdir)
 
@@ -90,14 +97,30 @@ class GeneSetEnrichmentAnalysis:
         gsea_collated_results[direction][time_point] = parsed_results
 
     @staticmethod
+    def remove_high_fdr_gene_sets(gsea_collated_results: dict[dict[pd.DataFrame]], time_points: list[float], threshold: float=0.1) -> None:
+        for direction, data in gsea_collated_results.items():
+            for time_point, gsea_results in data.items():
+                if time_point not in time_points:
+                    continue
+                gsea_collated_results[direction][time_point] = gsea_results[gsea_results["FDR"] < threshold]
+
+    @staticmethod
+    def remove_negative_nes_gene_sets(gsea_collated_results: dict[dict[pd.DataFrame]]) -> None:
+        # NOTE: When looking for up regulated gene sets, this should remove down regulated sets,
+        #  and when looking for down regulated gene sets, this should remove up regulated sets, if done correctly
+        # This is to simplify handling each separate "direction"
+        for direction, data in gsea_collated_results.items():
+            for time_point, gsea_results in data.items():
+                gsea_collated_results[direction][time_point] = gsea_results[gsea_results["NES"] > 0]
+
+    @staticmethod
     def extract_top_gene_sets(expression_directionality: list[str], time_points_of_interest: list[float],
                               gsea_collated_results: dict[dict[pd.DataFrame]]) -> dict[list[str]]:
         top_gene_sets = {direction: list() for direction in expression_directionality}
-        first_last_time_points = [time_points_of_interest[0], time_points_of_interest[-1]]
         for direction, data in gsea_collated_results.items():
-            for time_point in first_last_time_points:
+            for time_point in time_points_of_interest:
                 if direction == "up":
-                    top_gene_sets_subset = list(data[time_point].head(7).index)
+                    top_gene_sets_subset = list(data[time_point].head(10).index)
                 if direction == "down":
                     top_gene_sets_subset = list(data[time_point].head(1).index)
                 for gene_set in top_gene_sets_subset:
@@ -124,12 +147,17 @@ class GeneSetEnrichmentAnalysis:
 
     @staticmethod
     def generate_heatmap(heatmap_dataframe: pd.DataFrame, contrast: str, outdir: Path) -> None:
-        fig, ax = plt.subplots()
+        sns.set(font="sans-serif", font_scale=0.6)
+        fig, ax = plt.subplots(figsize=(3, 3))
     
-        heatmap = sns.heatmap(heatmap_dataframe, ax=ax, vmin=-3, vmax=3, cmap="RdBu_r", square=True)
+        heatmap = sns.heatmap(heatmap_dataframe, ax=ax, vmin=0, vmax=3, cmap="Reds", square=True, cbar_kws={"shrink": 0.75})
 
         # Title
-        title = contrast.split("_vs_")
+        title = contrast
+        replace_dict = {"MR": "MR766", "PRV": "PRVABC59", "No_Virus": "No Virus"}
+        for old, new in replace_dict.items():
+            title = title.replace(old, new)
+        title = title.split("_vs_")
         title.insert(1, "vs")
         title = "\n".join(title)
         heatmap.set_title(title)
@@ -160,7 +188,7 @@ class GeneSetEnrichmentAnalysis:
         # Saving graph
         figure_filename = f"{contrast}_heatmap.png"
         figure_outpath = outdir / figure_filename
-        fig.savefig(figure_outpath, bbox_inches="tight")
+        fig.savefig(figure_outpath, bbox_inches="tight", dpi=1200)
         plt.close(fig)
 
 if __name__ == "__main__":
