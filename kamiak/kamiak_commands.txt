@@ -4,6 +4,7 @@ mkdir ./src/singularity_image
 singularity pull ./src/singularity_image/zika.sif docker://alexanderbrown1313/zika:latest
 
 # Command prep
+module load singularity
 SINGULARITY_IMAGE="/home/alexander.brown/zika-rnaseq-analysis/src/singularity_image/zika.sif"
 
 HOST_APP_DIR="/home/alexander.brown/zika-rnaseq-analysis/src/app"
@@ -212,7 +213,8 @@ singularity exec --pwd /src \
     -t 9407 -g 0 \
     -b /src/data/go_analysis/ncbi_gene_results_9407.txt \
     -s /src/data/pydeseq2/degpatterns/R06E_MR_vs_No_Virus_gene_clusters.csv \
-    -o /src/data/go_analysis/R06E_MR_vs_No_Virus
+    -o /src/data/go_analysis/R06E_MR_vs_No_Virus \
+    -c MR766_vs_No_Virus
 
 # Figure 4A, C, E: DEGpattern
 singularity exec --pwd /src \

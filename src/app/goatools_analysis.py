@@ -7,6 +7,7 @@ from goatools.go_enrichment import GOEnrichmentStudy # type: ignore
 from goatools.mapslim import mapslim # type: ignore
 from goatools.obo_parser import GODag # type: ignore
 import matplotlib.pyplot as plt# type: ignore
+from matplotlib.colors import LinearSegmentedColormap
 from pathlib import Path
 from textwrap import wrap
 from typing import Any, Tuple
@@ -109,7 +110,7 @@ class GoatoolsManager:
         with study_genes_path.open() as inhandle:
             reader_iterator = reader(inhandle, delimiter=",")
             header = next(reader_iterator)
-            if group == 0:
+            if group == 0 or group == "0":
                 for line in reader_iterator:
                     study_genes.add(line[0])
             else:
@@ -228,7 +229,7 @@ class GoatoolsResultsManager(GoatoolsManager):
         return significant_results[1] #NOTE: May not want this, but does help remove very broad terms
 
 class GoatoolsResultsGrapher():
-    def run(self, results_path: Path) -> None:
+    def run(self, results_path: Path, title: str) -> None:
         results = self.extract_results(results_path)
         results_top_10 = results[:10][::-1] # NOTE: Need to reverse order so they plot correctly to bar chart
 
@@ -236,14 +237,15 @@ class GoatoolsResultsGrapher():
         gene_counts = self.extract_gene_counts(results_top_10)
         p_vals = self.extract_pvals(results_top_10)
         
-        cmap = plt.get_cmap("bwr_r")
-        colors = self.set_colors(cmap, p_vals)
+        cmap_colors = ["crimson", "purple", "blue"]
+        cmap = LinearSegmentedColormap.from_list("red_to_purple", cmap_colors)
+        barchart_colors = self.set_colors(cmap, p_vals)
         
-        _, ax = self.make_barchart(go_names, gene_counts, colors)
+        _, ax = self.make_barchart(go_names, gene_counts, barchart_colors, title)
         self.add_colorbar(cmap, p_vals, ax)
         
         figure_outpath = results_path.with_suffix(".png")
-        plt.savefig(figure_outpath, bbox_inches="tight")
+        plt.savefig(figure_outpath, bbox_inches="tight", dpi=300)
         plt.close()
 
     @staticmethod
@@ -255,7 +257,18 @@ class GoatoolsResultsGrapher():
     @staticmethod
     def extract_transform_go_names(results: list[dict]) -> list[str]:
         go_names = [r["most_significant_go_name"][1:-1] for r in results]
-        return ["\n".join(wrap(name, 40)) for name in go_names]
+
+        transformed_go_names = []
+        for go_name in go_names:
+            words = go_name.split()
+            if len(words) > 3:
+                #truncated_text = " ".join(words[:2] + ["\n"] + words[2:3] + ["..."])
+                truncated_text = " ".join(words[:3] + ["..."])
+            else:
+                truncated_text = " ".join(words)
+            transformed_go_names.append(truncated_text)
+
+        return transformed_go_names
 
     @staticmethod
     def extract_pvals(results: list[dict]) -> list[float]:
@@ -271,10 +284,13 @@ class GoatoolsResultsGrapher():
         return cmap(rescale)
 
     @staticmethod
-    def make_barchart(go_names: list[str], gene_counts: list[int], colors: list[list[float]]) -> Tuple[Any]:
-        fig, ax = plt.subplots()
+    def make_barchart(go_names: list[str], gene_counts: list[int], colors: list[list[float]], title: str) -> Tuple[Any]:
+        plt.rcParams["font.weight"] = "bold"
+        fig, ax = plt.subplots(figsize=(4, 3))
         ax.barh(go_names, gene_counts, color=colors)
-        ax.set_xlabel("Genes per GO Term")
+        ax.tick_params(axis="y", labelsize=10)
+        ax.set_title(title.replace("_", " "), fontweight="bold")
+        ax.set_xlabel("Genes per GO Term", fontweight="bold")
         if max(gene_counts) > 100:
             ax.set_xscale("log")
         return fig, ax
@@ -285,7 +301,7 @@ class GoatoolsResultsGrapher():
         sm.set_clim(vmin=min(p_vals), vmax=max(p_vals))
         cbar = plt.colorbar(sm, ax=ax)
         cbar.ax.invert_yaxis()
-        cbar.ax.set_title("p-val")
+        cbar.ax.set_title("p-val", fontweight="bold")
 
 if __name__ == "__main__":
     parser = ArgumentParser()
@@ -295,6 +311,7 @@ if __name__ == "__main__":
     parser.add_argument("-o", "--outdir", type=str, required=True)
     parser.add_argument("-g", "--group", type=str, required=True,
                         help="0 includes all groups, whereas any other number will extract only genes associated with that group")
+    parser.add_argument("-c", "--contrast", type=str, required=True)
     args = parser.parse_args()
 
     taxon_id = args.taxon_id
@@ -311,4 +328,4 @@ if __name__ == "__main__":
     grm.run(results)
     
     grg = GoatoolsResultsGrapher()
-    grg.run(grm.outpath)
+    grg.run(grm.outpath, args.contrast)
