@@ -37,27 +37,7 @@ class GeneCountCorrelations:
             method = "spearman"
             correlation_matrix = self.calculate_correlation_matrix(normalized_counts, method)
 
-            sns.set(font="sans-serif", font_scale=0.6)
-            fig, ax = plt.subplots(figsize=(2.5, 2.5))
-        
-            heatmap = sns.heatmap(correlation_matrix, ax=ax, vmin=0.9, square=True, cbar_kws={"shrink": 0.75})
-            cbar = heatmap.collections[0].colorbar
-            cbar.set_label("Spearman Coefficient", labelpad=10)
-
-            columns = [4, 8]
-            line_width = 2
-            for col in columns:
-                heatmap.axvline(col, color="white", lw=line_width)
-                heatmap.axhline(col, color="white", lw=line_width)
-            heatmap.set_xlabel("")
-            heatmap.set_ylabel("")
-            
-            heatmap.tick_params(left=False, bottom=False, pad=0)
-
-            figure_filename = f"{cell_line}_{method}_heatmap.png"
-            figure_outpath = self.outdir / figure_filename
-            fig.savefig(figure_outpath, bbox_inches="tight", dpi=300)
-            plt.close(fig)
+            self.generate_heatmap(correlation_matrix, cell_line, method, self.outdir)
     
     @staticmethod
     def filter_for_cell_line(gene_counts: pd.DataFrame, sample_metadata: pd.DataFrame, cell_line: str) -> tuple[pd.DataFrame, pd.DataFrame]:
@@ -133,6 +113,30 @@ class GeneCountCorrelations:
         min_value = correlation_matrix.min().min()
         print(f"{max_value}, {min_value}")
         return correlation_matrix
+
+    @staticmethod
+    def generate_heatmap(correlation_matrix: pd.DataFrame, cell_line: str, method: str, outdir: Path) -> None:
+        sns.set_theme(font="sans-serif", font_scale=0.6, rc={"font.weight": "bold"})
+        fig, ax = plt.subplots(figsize=(2.5, 2.5))
+    
+        heatmap = sns.heatmap(correlation_matrix, ax=ax, vmin=0.9, square=True, cbar_kws={"shrink": 0.75})
+        cbar = heatmap.collections[0].colorbar
+        cbar.set_label("Spearman Coefficient", labelpad=10, fontweight="bold")
+
+        columns = [4, 8]
+        line_width = 2
+        for col in columns:
+            heatmap.axvline(col, color="white", lw=line_width)
+            heatmap.axhline(col, color="white", lw=line_width)
+        heatmap.set_xlabel("")
+        heatmap.set_ylabel("")
+        
+        heatmap.tick_params(left=False, bottom=False, pad=0)
+
+        figure_filename = f"{cell_line}_{method}_heatmap.png"
+        figure_outpath = outdir / figure_filename
+        fig.savefig(figure_outpath, bbox_inches="tight", dpi=300)
+        plt.close(fig)
 
 if __name__ == "__main__":
     parser = ArgumentParser()
