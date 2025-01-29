@@ -51,7 +51,7 @@ class GeneSetEnrichmentAnalysis:
                     self.run_gsea_and_append(ranked_genes, gsea_collated_results, direction, time_point, contrast, self.outdir)
 
             self.remove_high_fdr_gene_sets(gsea_collated_results, time_points=[6.0], threshold=0.1)
-            self.remove_negative_nes_gene_sets(gsea_collated_results)
+            # self.remove_negative_nes_gene_sets(gsea_collated_results)
 
             print("Starting top gene set parsing")
             top_gene_sets = self.extract_top_gene_sets(expression_directionality, [6.0], gsea_collated_results)
@@ -69,7 +69,7 @@ class GeneSetEnrichmentAnalysis:
                                                    -log10(time_point_results["padj"])*time_point_results["log2FoldChange"],
                                                    nan)
             if direction == "down":
-                time_point_results["Rank"] = where(time_point_results["log2FoldChange"] < -0,
+                time_point_results["Rank"] = where(time_point_results["log2FoldChange"] < 0,
                                                    -log10(time_point_results["padj"])*(-1*time_point_results["log2FoldChange"]),
                                                    nan)
         time_point_results = time_point_results.sort_values("Rank", ascending = False)
@@ -143,14 +143,15 @@ class GeneSetEnrichmentAnalysis:
                 heatmap_data.append(df)
         heatmap_dataframe = pd.concat(heatmap_data, axis=1)
         heatmap_dataframe.columns = heatmap_dataframe.columns.astype(float)
+        heatmap_dataframe.columns = heatmap_dataframe.columns.astype(int)
         return heatmap_dataframe.groupby(level=0, axis=1).max()
 
     @staticmethod
     def generate_heatmap(heatmap_dataframe: pd.DataFrame, contrast: str, outdir: Path) -> None:
-        sns.set(font="sans-serif", font_scale=0.6)
+        sns.set_theme(font="sans-serif", font_scale=0.6, rc={"font.weight": "bold"})
         fig, ax = plt.subplots(figsize=(3, 3))
     
-        heatmap = sns.heatmap(heatmap_dataframe, ax=ax, vmin=0, vmax=3, cmap="Reds", square=True, cbar_kws={"shrink": 0.75})
+        heatmap = sns.heatmap(heatmap_dataframe, ax=ax, vmin=-3, vmax=3, cmap="RdBu_r", square=True, cbar_kws={"shrink": 0.75})
 
         # Title
         title = contrast
@@ -160,11 +161,11 @@ class GeneSetEnrichmentAnalysis:
         title = title.split("_vs_")
         title.insert(1, "vs")
         title = "\n".join(title)
-        heatmap.set_title(title)
+        heatmap.set_title(title, fontweight="bold")
 
         # Colorbar and null values
         cbar = heatmap.collections[0].colorbar
-        cbar.set_label("Normalized Enrichment Score", labelpad=10)
+        cbar.set_label("Normalized Enrichment Score", labelpad=10, fontweight="bold")
         heatmap.collections[0].cmap.set_bad("grey")
 
         # Truncating and setting labels
@@ -176,7 +177,8 @@ class GeneSetEnrichmentAnalysis:
             text = label.get_text()
             words = text.split()
             if len(words) > 3:
-                truncated_text = " ".join(words[:3] + ["..."])
+                #truncated_text = " ".join(words[:3] + ["..."])
+                truncated_text = " ".join(words[:2] + ["\n"] + words[2:3] + ["..."])
             else:
                 truncated_text = " ".join(words)
             labels.append(truncated_text)
