@@ -203,7 +203,7 @@ class GeneRelativeAbundance:
             times.add(time)
             boxplot_data[virus]["z_scores"].append(list(gene_relative_abundance_zscores.loc[(time, virus),]))
             
-        fig, ax = plt.subplots()
+        fig, ax = plt.subplots(figsize=(3,3))
         base_colors = ["red", "blue"]
         colors = iter(base_colors)
         for virus, data in boxplot_data.items():
@@ -223,20 +223,28 @@ class GeneRelativeAbundance:
                 ax.plot(x_values, z_scores, color=color, linestyle="None", marker="o", alpha=0.2)
 
         ax.set_xticks(ticks=list(range(1, len(times)+1)), labels=sorted(times))
-        ax.set_xlabel("Time (hr)")
-        ax.set_ylabel("Z score")
-        ax.set_title(f"Group: {group}, Genes: {len(genes)}")
+        ax.set_xlabel("HPI", fontweight="bold")
+        ax.set_ylabel("Z score", fontweight="bold")
+        ax.set_title(f"Group: {group}, Genes: {len(genes)}", fontweight="bold")
         ax.set_ylim(bottom=-2.5, top=2.5)
         
-        legend_handles = [mpatches.Patch(color=color, label=virus.replace("~","")) for color, virus in zip(base_colors, boxplot_data)]
-        ax.legend(handles=legend_handles)
+        legend_handles = []
+        replacements = {"~": "", "MR": "MR766", "PRV": "PRVABC59"}
+        for color, virus in zip(base_colors, boxplot_data):
+            for old, new in replacements.items():
+                virus = virus.replace(old, new)
+            legend_handles.append(mpatches.Patch(color=color, label=virus))
+        ax.legend(handles=legend_handles, prop={"weight": "bold"})
 
         ax.grid()
         ax.tick_params(grid_color="grey", grid_alpha=0.2)
 
+        ax.set_xticks(ax.get_xticks(), ax.get_xticklabels(), weight="bold")
+        ax.set_yticks(ax.get_yticks(), ax.get_yticklabels(), weight="bold")
+
         figure_filename = f"{cell_line}_{virus_contrast}_group_{group}.png"
         figure_outpath = outdir / figure_filename
-        fig.savefig(figure_outpath, bbox_inches="tight")
+        fig.savefig(figure_outpath, bbox_inches="tight", dpi=300)
         plt.close(fig)
 
     @staticmethod
