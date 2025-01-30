@@ -6,8 +6,8 @@ from goatools.base import dnld_file # type: ignore
 from goatools.go_enrichment import GOEnrichmentStudy # type: ignore
 from goatools.mapslim import mapslim # type: ignore
 from goatools.obo_parser import GODag # type: ignore
-import matplotlib.pyplot as plt# type: ignore
-from matplotlib.colors import LinearSegmentedColormap
+import matplotlib.pyplot as plt # type: ignore
+from matplotlib.colors import LinearSegmentedColormap # type: ignore
 from pathlib import Path
 from textwrap import wrap
 from typing import Any, Tuple

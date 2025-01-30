@@ -203,7 +203,7 @@ singularity exec --pwd /src \
     -k /src/data/pydeseq2/contrasts/R06E_virus_contrasts_per_time.csv \
     -l R06E -o /src/data/pydeseq2/degs
 
-# Figure 3 & Figure 4B, D, F: GOEA
+# Figure 3: GOEA
 singularity exec --pwd /src \
     --no-home \
     --bind $HOST_APP_DIR:/src/app \
@@ -243,6 +243,21 @@ singularity exec --pwd /src \
     -m /src/data/batch_effect_rectified/sample_metadata_final.csv \
     -g /src/data/degpatterns/R_output/R06E_MR_vs_PRV_gene_clusters.csv \
     -l R06E -v MR_vs_PRV -o /src/data/degpatterns/R06E_MR_vs_PRV
+
+# Figure 4B, D, F: GOEA
+# See goatools_array_mr_vs_prv.sh for each group
+singularity exec --pwd /src \
+    --no-home \
+    --bind $HOST_APP_DIR:/src/app \
+    --bind $HOST_DATA_GO_DIR:/src/data/go_analysis \
+    --bind $HOST_DATA_DEGPATTERNS_DIR:/src/data/degpatterns \
+    $SINGULARITY_IMAGE \
+    python3 -u /src/app/goatools_analysis.py \
+    -t 9407 -g 0 \
+    -b /src/data/go_analysis/ncbi_gene_results_9407.txt \
+    -s /src/data/degpatterns/R_output/R06E_MR_vs_PRV_gene_clusters.csv \
+    -o /src/data/go_analysis/R06E_MR_vs_PRV \
+    -c ""
 
 # To extract goi from contrasts file
 singularity exec --pwd /src \
