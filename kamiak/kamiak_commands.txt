@@ -259,6 +259,17 @@ singularity exec --pwd /src \
     -o /src/data/go_analysis/R06E_MR_vs_PRV \
     -c ""
 
+# Figure 5B
+singularity exec --pwd /src \
+    --no-home \
+    --bind $HOST_APP_DIR:/src/app \
+    --bind $HOST_DATA_DESEQ_DIR:/src/data/pydeseq2 \
+    $SINGULARITY_IMAGE \
+    python3 -u /src/app/extract_and_heatmap_goi.py \
+    -k /src/data/pydeseq2/contrasts/R06E_virus_contrasts_per_time.csv \
+    -g /src/data/pydeseq2/MR_vs_PRV_goi.csv \
+    -l R06E -o /src/data/pydeseq2/degs -v MR_vs_PRV
+
 # To extract goi from contrasts file
 singularity exec --pwd /src \
     --no-home \
