@@ -268,7 +268,7 @@ singularity exec --pwd /src \
     python3 -u /src/app/extract_and_heatmap_goi.py \
     -k /src/data/pydeseq2/contrasts/R06E_virus_contrasts_per_time.csv \
     -g /src/data/pydeseq2/MR_vs_PRV_goi.csv \
-    -l R06E -o /src/data/pydeseq2/degs -v MR_vs_PRV
+    -l R06E -o /src/data/pydeseq2/goi_log2_fc -v MR_vs_PRV
 
 # To extract goi from contrasts file
 singularity exec --pwd /src \

@@ -1,9 +1,9 @@
 from argparse import ArgumentParser
-from collections import defaultdict
 from csv import reader
-from numpy import log10, where # type: ignore
+import matplotlib.pyplot as plt # type: ignore
 import pandas as pd # type: ignore
 from pathlib import Path
+import seaborn as sns # type: ignore
 
 class ContrastGOIManager:
     def __init__(self, count_contrasts_path: Path, goi_path: Path, cell_line: str, outdir: Path, virus_contrast: str) -> None:
@@ -35,11 +35,8 @@ class ContrastGOIManager:
         count_contrasts = self.extract_count_contrasts(self.count_contrasts_path)
         goi_fold_changes = self.extract_goi_log2_fold_change(count_contrasts, self.genes_of_interest, self.virus_contrast)
         goi_fold_changes = self.load_significant_genes_to_pd_dataframe(goi_fold_changes)
-        print(goi_fold_changes)
-        quit()
 
-        significant_genes_outpath = self.outdir / f"{self.cell_line}_deg_genes_by_contrast.csv"
-        significant_genes.to_csv(significant_genes_outpath, index=True)
+        self.generate_heatmap(goi_fold_changes, self.virus_contrast, self.outdir)
 
     @staticmethod
     def extract_count_contrasts(count_contrasts: Path) -> pd.DataFrame:
@@ -72,8 +69,36 @@ class ContrastGOIManager:
             columns.append(time_point)
             dataframe_list.append(data)
         df = pd.concat(dataframe_list, axis=1).sort_index()
-        df.columns = columns
+        df.columns = [int(column) for column in columns]
         return df
+
+    @staticmethod
+    def generate_heatmap(heatmap_dataframe: pd.DataFrame, contrast: str, outdir: Path) -> None:
+        sns.set_theme(font="sans-serif", font_scale=0.6, rc={"font.weight": "bold"})
+        fig, ax = plt.subplots(figsize=(3, 3))
+    
+        heatmap = sns.heatmap(heatmap_dataframe, ax=ax, vmin=-2, vmax=2, cmap="RdBu_r", square=True, cbar_kws={"shrink": 0.75})
+
+        # Colorbar and null values
+        cbar = heatmap.collections[0].colorbar
+        cbar.set_label("Log2 Fold Change", labelpad=10, fontweight="bold")
+        heatmap.collections[0].cmap.set_bad("grey")
+
+        # Truncating and setting labels
+        heatmap.set_xlabel("")
+        heatmap.set_ylabel("")
+        
+        heatmap.axvline(1, color="black", lw=2)
+
+        plt.tight_layout()
+        
+        heatmap.tick_params(left=False, bottom=False)
+
+        # Saving graph
+        figure_filename = f"{contrast}_log2_fc_heatmap.png"
+        figure_outpath = outdir / figure_filename
+        fig.savefig(figure_outpath, bbox_inches="tight", dpi=1200)
+        plt.close(fig)
 
 if __name__ == "__main__":
     parser = ArgumentParser()
