@@ -15,6 +15,7 @@ HOST_DATA_BATCH_EFFECT_DIR="/home/alexander.brown/zika-rnaseq-analysis/src/data/
 HOST_DATA_DESEQ_DIR="/home/alexander.brown/zika-rnaseq-analysis/src/data/pydeseq2"
 HOST_DATA_GO_DIR="/home/alexander.brown/zika-rnaseq-analysis/src/data/go_analysis"
 HOST_DATA_DEGPATTERNS_DIR="/home/alexander.brown/zika-rnaseq-analysis/src/data/degpatterns"
+HOST_DATA_PPI_DIR="/home/alexander.brown/zika-rnaseq-analysis/src/data/ppi_networks"
 HOST_GENOME_DIR="/home/alexander.brown/zika-rnaseq-analysis/src/genomes"
 
 R1_ADAPTER_SEQ="AGATCGGAAGAGCACACGTCTGAACTCCAGTCAC"
@@ -270,13 +271,13 @@ singularity exec --pwd /src \
     -g /src/data/pydeseq2/MR_vs_PRV_goi.csv \
     -l R06E -o /src/data/pydeseq2/goi_log2_fc -v MR_vs_PRV
 
-# To extract goi from contrasts file
+# Figure 5C
 singularity exec --pwd /src \
     --no-home \
     --bind $HOST_APP_DIR:/src/app \
     --bind $HOST_DATA_DESEQ_DIR:/src/data/pydeseq2 \
+    --bind $HOST_DATA_PPI_DIR:/src/data/ppi_networks \
     $SINGULARITY_IMAGE \
-    python3 -u /src/app/extract_goi_for_pathway_view.py \
-    -k /src/data/pydeseq2/contrasts/R06E_virus_contrasts_per_time.csv \
-    -g /src/data/pydeseq2/relative_gene_abundance/MR_vs_PRV_cytokine.csv \
-    -l R06E -o /src/data/pydeseq2/
+    python3 -u /src/app/goi_string_network.py \
+    -g /src/data/pydeseq2/MR_vs_PRV_goi.csv \
+    -o /src/data/ppi_networks
