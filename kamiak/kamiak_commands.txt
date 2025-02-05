@@ -281,3 +281,13 @@ singularity exec --pwd /src \
     python3 -u /src/app/goi_string_network.py \
     -g /src/data/pydeseq2/MR_vs_PRV_goi.csv \
     -o /src/data/ppi_networks
+
+# Count replicates
+singularity exec --pwd /src \
+    --no-home \
+    --bind $HOST_APP_DIR:/src/app \
+    --bind $HOST_DATA_BATCH_EFFECT_DIR:/src/data/batch_effect_rectified \
+    $SINGULARITY_IMAGE \
+    python3 -u /src/app/count_replicates.py \
+    -m /src/data/batch_effect_rectified/sample_metadata_final.csv \
+    -o /src/data/batch_effect_rectified/
