@@ -36,6 +36,8 @@ class ContrastGOIManager:
         goi_fold_changes = self.extract_goi_log2_fold_change(count_contrasts, self.genes_of_interest, self.virus_contrast)
         goi_fold_changes = self.load_significant_genes_to_pd_dataframe(goi_fold_changes)
 
+        goi_fold_changes = goi_fold_changes.sort_values(by=6, ascending=False)
+
         self.generate_heatmap(goi_fold_changes, self.virus_contrast, self.outdir)
 
     @staticmethod
