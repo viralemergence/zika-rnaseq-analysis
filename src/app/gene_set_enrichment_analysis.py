@@ -73,6 +73,8 @@ class GeneSetEnrichmentAnalysis:
                                                    -log10(time_point_results["padj"])*(-1*time_point_results["log2FoldChange"]),
                                                    nan)
         time_point_results = time_point_results.sort_values("Rank", ascending = False)
+        max_rank = time_point_results["Rank"].max()
+        time_point_results["Rank"] = max_rank = time_point_results["Rank"]/max_rank # NOTE: Scales to max value of 1; not needed, but could make metric visually easier to compare
         time_point_results["Gene"] = time_point_results.index
         return time_point_results[["Gene", "Rank"]].reset_index(drop=True)
 
