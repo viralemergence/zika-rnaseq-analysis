@@ -53,7 +53,9 @@ class StringNetworkManager:
         nc = [cmap(i) for i in nc]
 
         pos = nx.spring_layout(G, k=2)
-        fig, ax = plt.subplots(figsize=(6,5))
+
+        plt.rcParams["svg.fonttype"] = "none"
+        fig, ax = plt.subplots(figsize=(6,5), dpi=1200)
         nx.draw_networkx(G, pos,
                          node_color=nc, node_shape="o", node_size=1300,
                          font_color="white", font_size=8, font_weight="bold",
@@ -68,6 +70,8 @@ class StringNetworkManager:
 
         plt.tight_layout()
         figure_outpath = self.outdir / "ppi_network.png"
+        plt.savefig(figure_outpath, transparent=True)
+        figure_outpath = self.outdir / "ppi_network.svg"
         plt.savefig(figure_outpath, transparent=True)
 
 if __name__ == "__main__":

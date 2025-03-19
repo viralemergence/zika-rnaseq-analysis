@@ -148,10 +148,11 @@ class GeneSetEnrichmentAnalysis:
         heatmap_dataframe.columns = heatmap_dataframe.columns.astype(int)
         return heatmap_dataframe.groupby(level=0, axis=1).max()
 
-    @staticmethod
-    def generate_heatmap(heatmap_dataframe: pd.DataFrame, contrast: str, outdir: Path) -> None:
+    @classmethod
+    def generate_heatmap(cls, heatmap_dataframe: pd.DataFrame, contrast: str, outdir: Path) -> None:
+        plt.rcParams["svg.fonttype"] = "none"
         sns.set_theme(font="sans-serif", font_scale=0.6, rc={"font.weight": "bold"})
-        fig, ax = plt.subplots(figsize=(3, 3))
+        fig, ax = plt.subplots(figsize=(3, 3), dpi=1200)
     
         heatmap = sns.heatmap(heatmap_dataframe, ax=ax, vmin=-3, vmax=3, cmap="RdBu_r", square=True, cbar_kws={"shrink": 0.75})
 
@@ -171,29 +172,41 @@ class GeneSetEnrichmentAnalysis:
         heatmap.collections[0].cmap.set_bad("grey")
 
         # Truncating and setting labels
-        heatmap.set_xlabel("")
+        heatmap.set_xlabel("HPI", fontweight="bold")
         heatmap.set_ylabel("")
         
         labels = []
         for label in heatmap.get_yticklabels():
             text = label.get_text()
-            words = text.split()
-            if len(words) > 3:
-                #truncated_text = " ".join(words[:3] + ["..."])
-                truncated_text = " ".join(words[:2] + ["\n"] + words[2:3] + ["..."])
-            else:
-                truncated_text = " ".join(words)
-            labels.append(truncated_text)
+            if len(text) > 25:
+                text = cls.kegg_pathway_id_mapper(text)
+            labels.append(text)
         heatmap.set_yticklabels(labels)
         plt.tight_layout()
         
         heatmap.tick_params(left=False, bottom=False)
 
         # Saving graph
-        figure_filename = f"{contrast}_heatmap.png"
+        figure_filename = f"{contrast}_heatmap.svg"
         figure_outpath = outdir / figure_filename
-        fig.savefig(figure_outpath, bbox_inches="tight", dpi=1200)
+        fig.savefig(figure_outpath, bbox_inches="tight")
         plt.close(fig)
+
+    @staticmethod
+    def kegg_pathway_id_mapper(pathway: str) -> str:
+        kegg_pathway_id_mapping = {
+            "Viral protein interaction with cytokine and cytokine receptor": "hsa04061",
+            "Toll-like receptor signaling pathway": "hsa04620",
+            "Hematopoietic cell lineage": "hsa04640",
+            "Cytosolic DNA-sensing pathway": "hsa04623",
+            "Staphylococcus aureus infection": "hsa05150",
+            "Kaposi sarcoma-associated herpesvirus infection": "hsa05167",
+            "Ubiquitin mediated proteolysis": "hsa04120",
+            "NF-kappa B signaling pathway": "hsa04064",
+            "Cytosolic DNA-sensing pathway": "hsa04623",
+            "Hypertrophic cardiomyopathy": "hsa05410"
+        }
+        return kegg_pathway_id_mapping[pathway]
 
 if __name__ == "__main__":
     parser = ArgumentParser()

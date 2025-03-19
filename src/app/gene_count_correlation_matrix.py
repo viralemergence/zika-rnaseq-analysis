@@ -116,8 +116,9 @@ class GeneCountCorrelations:
 
     @staticmethod
     def generate_heatmap(correlation_matrix: pd.DataFrame, cell_line: str, method: str, outdir: Path) -> None:
-        sns.set_theme(font="sans-serif", font_scale=0.6, rc={"font.weight": "bold"})
-        fig, ax = plt.subplots(figsize=(2.5, 2.5))
+        plt.rcParams["svg.fonttype"] = "none"
+        sns.set_theme(font="sans-serif", font_scale=0.6)
+        fig, ax = plt.subplots(figsize=(2.5, 2.5), dpi=1200)
     
         heatmap = sns.heatmap(correlation_matrix, ax=ax, vmin=0.9, square=True, cbar_kws={"shrink": 0.75})
         cbar = heatmap.collections[0].colorbar
@@ -133,9 +134,9 @@ class GeneCountCorrelations:
         
         heatmap.tick_params(left=False, bottom=False, pad=0)
 
-        figure_filename = f"{cell_line}_{method}_heatmap.png"
+        figure_filename = f"{cell_line}_{method}_heatmap.svg"
         figure_outpath = outdir / figure_filename
-        fig.savefig(figure_outpath, bbox_inches="tight", dpi=300)
+        fig.savefig(figure_outpath, bbox_inches="tight")
         plt.close(fig)
 
 if __name__ == "__main__":

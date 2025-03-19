@@ -245,7 +245,9 @@ class GoatoolsResultsGrapher():
         self.add_colorbar(cmap, p_vals, ax)
         
         figure_outpath = results_path.with_suffix(".png")
-        plt.savefig(figure_outpath, bbox_inches="tight", dpi=300)
+        plt.savefig(figure_outpath, bbox_inches="tight")
+        figure_outpath = results_path.with_suffix(".svg")
+        plt.savefig(figure_outpath, bbox_inches="tight")
         plt.close()
 
     @staticmethod
@@ -257,17 +259,15 @@ class GoatoolsResultsGrapher():
     @staticmethod
     def extract_transform_go_names(results: list[dict]) -> list[str]:
         go_names = [r["most_significant_go_name"][1:-1] for r in results]
+        go_ids = [r["most_significant_go_id"] for r in results]
 
         transformed_go_names = []
-        for go_name in go_names:
-            words = go_name.split()
-            if len(words) > 3:
-                #truncated_text = " ".join(words[:2] + ["\n"] + words[2:3] + ["..."])
-                truncated_text = " ".join(words[:3] + ["..."])
+        for go_name, go_id in zip(go_names, go_ids):
+            if len(go_name) > 25:
+                print(f"{go_id}={go_name}")
+                transformed_go_names.append(go_id)
             else:
-                truncated_text = " ".join(words)
-            transformed_go_names.append(truncated_text)
-
+                transformed_go_names.append(go_name)
         return transformed_go_names
 
     @staticmethod
@@ -285,8 +285,9 @@ class GoatoolsResultsGrapher():
 
     @staticmethod
     def make_barchart(go_names: list[str], gene_counts: list[int], colors: list[list[float]], title: str) -> Tuple[Any]:
+        plt.rcParams["svg.fonttype"] = "none"
         plt.rcParams["font.weight"] = "bold"
-        fig, ax = plt.subplots(figsize=(4, 3))
+        fig, ax = plt.subplots(figsize=(4, 3), dpi=1200)
         ax.barh(go_names, gene_counts, color=colors)
         ax.tick_params(axis="y", labelsize=10)
         ax.set_title(title.replace("_", " "), fontweight="bold")

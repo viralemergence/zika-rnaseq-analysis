@@ -203,7 +203,8 @@ class GeneRelativeAbundance:
             times.add(time)
             boxplot_data[virus]["z_scores"].append(list(gene_relative_abundance_zscores.loc[(time, virus),]))
             
-        fig, ax = plt.subplots(figsize=(3,3))
+        plt.rcParams["svg.fonttype"] = "none"
+        fig, ax = plt.subplots(figsize=(3,3), dpi=1200)
         base_colors = ["red", "blue"]
         colors = iter(base_colors)
         for virus, data in boxplot_data.items():
@@ -242,9 +243,9 @@ class GeneRelativeAbundance:
         ax.set_xticks(ax.get_xticks(), ax.get_xticklabels(), weight="bold")
         ax.set_yticks(ax.get_yticks(), ax.get_yticklabels(), weight="bold")
 
-        figure_filename = f"{cell_line}_{virus_contrast}_group_{group}.png"
+        figure_filename = f"{cell_line}_{virus_contrast}_group_{group}.svg"
         figure_outpath = outdir / figure_filename
-        fig.savefig(figure_outpath, bbox_inches="tight", dpi=300)
+        fig.savefig(figure_outpath, bbox_inches="tight")
         plt.close(fig)
 
     @staticmethod
