@@ -13,7 +13,7 @@
 
 SINGULARITY_IMAGE="/home/alexander.brown/zika-rnaseq-analysis/src/singularity_image/zika.sif"
 
-SCRATCH_DIR="/scratch/user/alexander.brown/20241028_213454"
+SCRATCH_DIR="/scratch/user/alexander.brown/20250324_141326"
 FASTQ_DIR=$SCRATCH_DIR"/fastq"
 
 ENV_FILE="/home/alexander.brown/zika-rnaseq-analysis/.env"
@@ -26,3 +26,4 @@ singularity exec --pwd /src \
     --env-file $ENV_FILE \
     $SINGULARITY_IMAGE \
     bs download project -i 423121844 -o /src/data/fastq --extension=fastq.gz
+# 432190937
